@@ -19,11 +19,12 @@ Requires **iOS 15+**. No third-party dependencies.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/<you>/ApiLogKit.git", from: "0.1.0"),
+    .package(url: "https://github.com/henrydavl/ApiLogKit.git", from: "0.1.0"),
 ]
 ```
 
-Or in Xcode: *File ▸ Add Package Dependencies…* and paste the repo URL.
+Or in Xcode: *File ▸ Add Package Dependencies…* and paste:
+`https://github.com/henrydavl/ApiLogKit.git`
 
 ## Usage
 
