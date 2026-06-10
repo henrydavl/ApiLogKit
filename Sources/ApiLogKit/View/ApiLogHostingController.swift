@@ -20,7 +20,17 @@ public final class ApiLogHostingController: UIHostingController<ApiLogListView> 
         weak var holder: ApiLogHostingController?
         super.init(rootView: ApiLogListView(logs: logs, onClose: { holder?.close() }))
         holder = self
-        modalPresentationStyle = .fullScreen
+        // `.overFullScreen` (not `.fullScreen`) so presenting over a sheet/bottom
+        // sheet doesn't tear down the presenter — otherwise the underlying sheet
+        // comes back mis-laid-out after dismiss.
+        modalPresentationStyle = .overFullScreen
+    }
+
+    public override func viewDidLoad() {
+        super.viewDidLoad()
+        // `.overFullScreen` can let content behind show through, since a hosting
+        // controller's view background defaults to clear. Force it opaque.
+        view.backgroundColor = .systemBackground
     }
 
     @available(*, unavailable)
