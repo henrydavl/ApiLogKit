@@ -9,6 +9,9 @@ let package = Package(
         .library(name: "ApiLogKit", targets: ["ApiLogKit"]),
     ],
     targets: [
-        .target(name: "ApiLogKit"),
+        .target(
+            name: "ApiLogKit",
+            linkerSettings: [.linkedFramework("AudioToolbox")]
+        ),
     ]
 )

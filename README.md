@@ -10,6 +10,7 @@ logs (plus analytics events such as AppsFlyer) and presents them in a debug UI w
 - 📤 Export as raw log or ready-to-run cURL command
 - 📎 Copy any value, subtree, or section with toast confirmation
 - 🧭 Floating scroll-to-top/bottom buttons on long payloads
+- 📳 Shake to open — one-line setup, works from any screen, no boilerplate
 
 Requires **iOS 15+**. No third-party dependencies.
 
@@ -19,7 +20,7 @@ Requires **iOS 15+**. No third-party dependencies.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/henrydavl/ApiLogKit.git", from: "0.1.0"),
+    .package(url: "https://github.com/henrydavl/ApiLogKit.git", from: "0.2.0"),
 ]
 ```
 
@@ -78,15 +79,22 @@ extension ApiLog {
 
 ### 2. Show the inspector
 
-From SwiftUI:
+**Shake to open (recommended)** — call once at startup and the inspector appears
+on any shake, from any screen, with no further setup:
 
 ```swift
-ApiLogListView(logs: ApiLogger.shared.getLogs())
+// AppDelegate / SceneDelegate
+ApiLogger.shared.isEnabled = isDevelopmentBuild
+ApiLogger.shared.enableShakeToOpen()
 ```
 
-From UIKit (e.g. a shake gesture or debug menu):
+**Manual presentation** — present it yourself from SwiftUI or UIKit whenever you like:
 
 ```swift
+// SwiftUI
+ApiLogListView(logs: ApiLogger.shared.getLogs())
+
+// UIKit
 let controller = ApiLogHostingController(logs: ApiLogger.shared.getLogs())
 present(controller, animated: true)
 ```

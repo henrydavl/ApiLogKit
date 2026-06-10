@@ -51,4 +51,11 @@ public final class ApiLogger {
             self.appsFlyerLog.removeAll()
         }
     }
+
+    /// Installs a shake gesture that automatically presents the log inspector
+    /// from any screen — no `motionEnded` override needed in the host app.
+    /// Call this once during app startup (e.g. AppDelegate / SceneDelegate).
+    public func enableShakeToOpen() {
+        ShakeDetector.shared.install()
+    }
 }
