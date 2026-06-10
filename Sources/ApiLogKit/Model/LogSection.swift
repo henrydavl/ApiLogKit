@@ -22,11 +22,11 @@ public enum LogSection: Int, CaseIterable {
     public func title(for logType: LogEventType) -> String {
         switch self {
         case .requestURL:
-            return logType == .appsFlyer ? "Event Name" : "Request URL"
+            return logType == .eventTracker ? "Event Name" : "Request URL"
         case .requestHeader:
             return "Request Header"
         case .requestBody:
-            return logType == .appsFlyer ? "Event Parameters" : "Request Body"
+            return logType == .eventTracker ? "Event Parameters" : "Request Body"
         case .responseHeader:
             return "Response Header"
         case .responseBody:

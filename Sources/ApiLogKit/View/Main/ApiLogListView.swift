@@ -87,11 +87,11 @@ public struct ApiLogListView: View {
 
             if viewModel.isAppsFlyerEnabled {
                 Button {
-                    viewModel.switchTo(.appsFlyer)
+                    viewModel.switchTo(.eventTracker)
                 } label: {
                     Label(
                         "AppsFlyer",
-                        systemImage: viewModel.logType == .appsFlyer ? "checkmark" : "chart.line.uptrend.xyaxis"
+                        systemImage: viewModel.logType == .eventTracker ? "checkmark" : "chart.line.uptrend.xyaxis"
                     )
                 }
             }

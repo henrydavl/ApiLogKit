@@ -37,7 +37,7 @@ final class ApiLogListViewModel: ObservableObject {
         switch logType {
         case .api:
             source = apiLogs
-        case .appsFlyer:
+        case .eventTracker:
             source = ApiLogger.shared.getAppsFlyerLogs()
         }
 
@@ -55,7 +55,7 @@ final class ApiLogListViewModel: ObservableObject {
 
     func switchTo(_ type: LogEventType) {
         // Guard against switching to AppsFlyer when it isn't enabled.
-        if type == .appsFlyer, !isAppsFlyerEnabled {
+        if type == .eventTracker, !isAppsFlyerEnabled {
             switchTo(.api)
             return
         }

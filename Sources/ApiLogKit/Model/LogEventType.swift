@@ -7,5 +7,5 @@
 
 public enum LogEventType {
     case api
-    case appsFlyer
+    case eventTracker
 }
