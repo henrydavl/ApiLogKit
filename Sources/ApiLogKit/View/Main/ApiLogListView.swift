@@ -24,7 +24,7 @@ public struct ApiLogListView: View {
     public var body: some View {
         NavigationView {
             list
-                .navigationTitle(viewModel.logType == .api ? "API Logs" : "AppsFlyer")
+                .navigationTitle(viewModel.logType == .api ? "API Logs" : "EventTracker")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
@@ -85,12 +85,12 @@ public struct ApiLogListView: View {
                 Label("API Logs", systemImage: viewModel.logType == .api ? "checkmark" : "list.bullet")
             }
 
-            if viewModel.isAppsFlyerEnabled {
+            if viewModel.isEventTrackerLogEnabled {
                 Button {
                     viewModel.switchTo(.eventTracker)
                 } label: {
                     Label(
-                        "AppsFlyer",
+                        "EventTracker",
                         systemImage: viewModel.logType == .eventTracker ? "checkmark" : "chart.line.uptrend.xyaxis"
                     )
                 }

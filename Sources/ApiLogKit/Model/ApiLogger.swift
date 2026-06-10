@@ -11,20 +11,20 @@ public final class ApiLogger {
     private init() {}
 
     private var logs: [ApiLog] = []
-    private var appsFlyerLog: [ApiLog] = []
-    private var isEnableAppsFlyerLog: Bool = false
+    private var eventTrackerLog: [ApiLog] = []
+    private var isEnableEventTrackerLog: Bool = false
     private let queue = DispatchQueue(label: "apilogkit.logger.queue")
 
     /// Master switch — when false, `addLog`/`addAppsFlyerLog` are no-ops.
     /// Hosts typically gate this on their environment (e.g. dev builds only).
     public var isEnabled: Bool = true
 
-    public var isAppsFlyerLogEnabled: Bool {
-        isEnableAppsFlyerLog
+    public var isEventTrackerLogEnabled: Bool {
+        isEnableEventTrackerLog
     }
 
-    public func enableAppsFlyerLog(_ isEnabled: Bool) {
-        isEnableAppsFlyerLog = isEnabled
+    public func enableEventTrackerLog(_ isEnabled: Bool) {
+        isEnableEventTrackerLog = isEnabled
     }
 
     public func addLog(_ log: ApiLog) {
@@ -32,23 +32,23 @@ public final class ApiLogger {
         queue.async { self.logs.append(log) }
     }
 
-    public func addAppsFlyerLog(_ log: ApiLog) {
+    public func addEventTrackerLog(_ log: ApiLog) {
         guard isEnabled else { return }
-        queue.async { self.appsFlyerLog.append(log) }
+        queue.async { self.eventTrackerLog.append(log) }
     }
 
     public func getLogs() -> [ApiLog] {
         queue.sync { self.logs }
     }
 
-    public func getAppsFlyerLogs() -> [ApiLog] {
-        queue.sync { self.appsFlyerLog }
+    public func getEventTrackerLogs() -> [ApiLog] {
+        queue.sync { self.eventTrackerLog }
     }
 
     public func clearLogs() {
         queue.async {
             self.logs.removeAll()
-            self.appsFlyerLog.removeAll()
+            self.eventTrackerLog.removeAll()
         }
     }
 

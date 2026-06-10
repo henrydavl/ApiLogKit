@@ -22,7 +22,7 @@ final class ApiLogListViewModel: ObservableObject {
     /// (mirrors the legacy controller, which is created with `getLogs()`).
     private let apiLogs: [ApiLog]
 
-    var isAppsFlyerEnabled: Bool { ApiLogger.shared.isAppsFlyerLogEnabled }
+    var isEventTrackerLogEnabled: Bool { ApiLogger.shared.isEventTrackerLogEnabled }
     var isDevOptionsEnabled: Bool { ApiLogKitConfig.developerOptionsProvider != nil }
 
     init(logs: [ApiLog]) {
@@ -38,7 +38,7 @@ final class ApiLogListViewModel: ObservableObject {
         case .api:
             source = apiLogs
         case .eventTracker:
-            source = ApiLogger.shared.getAppsFlyerLogs()
+            source = ApiLogger.shared.getEventTrackerLogs()
         }
 
         let query = searchText.maxCharacter(50).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -54,8 +54,8 @@ final class ApiLogListViewModel: ObservableObject {
     // MARK: - Actions
 
     func switchTo(_ type: LogEventType) {
-        // Guard against switching to AppsFlyer when it isn't enabled.
-        if type == .eventTracker, !isAppsFlyerEnabled {
+        // Guard against switching to EventTracker when it isn't enabled.
+        if type == .eventTracker, !isEventTrackerLogEnabled {
             switchTo(.api)
             return
         }

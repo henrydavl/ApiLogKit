@@ -110,9 +110,9 @@ ApiLogKitConfig.developerOptionsProvider = { onDismiss in
     AnyView(MyDevOptionsView(onDismiss: onDismiss))
 }
 
-// Track analytics events in a separate "AppsFlyer" tab.
-ApiLogger.shared.enableAppsFlyerLog(true)
-ApiLogger.shared.addAppsFlyerLog(
+// Track analytics events in a separate "EventTracker" tab.
+ApiLogger.shared.enableEventTrackerLog(true)
+ApiLogger.shared.addEventTrackerLog(
     ApiLog(eventName: "purchase_completed", requestBody: params, responseBody: response)
 )
 ```
