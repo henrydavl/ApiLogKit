@@ -5,6 +5,7 @@
 //  Created by Henry David Lie on 10/06/26.
 //
 
+import Combine
 import Foundation
 
 /// Identifiable wrapper so `ApiLog` (a plain struct) can be used in `ForEach`.
@@ -18,16 +19,42 @@ final class ApiLogListViewModel: ObservableObject {
     @Published var searchText: String = ""
     @Published private(set) var logType: LogEventType = .api
 
-    /// Logs passed in at presentation time, used as the `.api` data source
-    /// (mirrors the legacy controller, which is created with `getLogs()`).
-    private let apiLogs: [ApiLog]
+    /// Live mirrors of the logger's data, kept up to date via Combine so logs
+    /// added while this screen is on-screen (e.g. from Developer Options) show
+    /// up without closing and reopening the inspector.
+    private var apiLogs: [ApiLog] = []
+    private var eventTrackerLogs: [ApiLog] = []
+    private var cancellables = Set<AnyCancellable>()
 
     var isEventTrackerLogEnabled: Bool { ApiLogger.shared.isEventTrackerLogEnabled }
     var isDevOptionsEnabled: Bool { ApiLogKitConfig.developerOptionsProvider != nil }
 
-    init(logs: [ApiLog]) {
-        self.apiLogs = logs
-        reload()
+    /// `logs` is retained for source compatibility; the data source is now the
+    /// live `ApiLogger.shared` publishers, which replay their current value on
+    /// subscription, so the initial snapshot is no longer needed.
+    init(logs: [ApiLog] = []) {
+        ApiLogger.shared.logsPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] logs in
+                self?.apiLogs = logs
+                self?.reload()
+            }
+            .store(in: &cancellables)
+
+        ApiLogger.shared.eventTrackerLogsPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] logs in
+                self?.eventTrackerLogs = logs
+                self?.reload()
+            }
+            .store(in: &cancellables)
+
+        // Debounced search — replaces the view's `.onChange(of:)` reload.
+        $searchText
+            .dropFirst()
+            .debounce(for: .milliseconds(250), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in self?.reload() }
+            .store(in: &cancellables)
     }
 
     // MARK: - Data
@@ -38,7 +65,7 @@ final class ApiLogListViewModel: ObservableObject {
         case .api:
             source = apiLogs
         case .eventTracker:
-            source = ApiLogger.shared.getEventTrackerLogs()
+            source = eventTrackerLogs
         }
 
         let query = searchText.maxCharacter(50).trimmingCharacters(in: .whitespacesAndNewlines)

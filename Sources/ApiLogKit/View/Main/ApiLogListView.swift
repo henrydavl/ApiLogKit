@@ -39,7 +39,6 @@ public struct ApiLogListView: View {
                     }
                 }
                 .searchable(text: $viewModel.searchText, prompt: "Search URL")
-                .onChange(of: viewModel.searchText) { _ in viewModel.reload() }
                 .background(devOptionsLink)
         }
         .navigationViewStyle(.stack)
