@@ -13,6 +13,15 @@ public enum ApiLogKitConfig {
     /// Locale used when formatting log dates (row timestamps).
     public static var dateLocale: Locale = .current
 
+    /// Filtering and retention for the 3rd-party traffic tracker.
+    ///
+    /// Set this before calling `ApiLogger.shared.enableThirdPartyTracker(_:)` —
+    /// most importantly `ignoredHosts`, so your own API keeps flowing through
+    /// your existing logging instead of being duplicated into the 3rd-party tab.
+    ///
+    ///     ApiLogKitConfig.thirdPartyTracker.ignoredHosts = ["api.myapp.com"]
+    public static var thirdPartyTracker = ThirdPartyTrackerOptions()
+
     /// Optional hook for a host-provided "Developer Options" screen.
     ///
     /// When set, the log list's menu shows a "Developer Options" entry that

@@ -24,10 +24,20 @@ final class ApiLogListViewModel: ObservableObject {
     /// up without closing and reopening the inspector.
     private var apiLogs: [ApiLog] = []
     private var eventTrackerLogs: [ApiLog] = []
+    private var thirdPartyLogs: [ApiLog] = []
     private var cancellables = Set<AnyCancellable>()
 
     var isEventTrackerLogEnabled: Bool { ApiLogger.shared.isEventTrackerLogEnabled }
+    var isThirdPartyTrackerEnabled: Bool { ApiLogger.shared.isThirdPartyTrackerEnabled }
     var isDevOptionsEnabled: Bool { ApiLogKitConfig.developerOptionsProvider != nil }
+
+    var title: String {
+        switch logType {
+        case .api:          return "API Logs"
+        case .eventTracker: return "EventTracker"
+        case .thirdParty:   return "3rd Party"
+        }
+    }
 
     /// `logs` is retained for source compatibility; the data source is now the
     /// live `ApiLogger.shared` publishers, which replay their current value on
@@ -49,6 +59,14 @@ final class ApiLogListViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
+        ApiLogger.shared.thirdPartyLogsPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] logs in
+                self?.thirdPartyLogs = logs
+                self?.reload()
+            }
+            .store(in: &cancellables)
+
         // Debounced search — replaces the view's `.onChange(of:)` reload.
         $searchText
             .dropFirst()
@@ -66,11 +84,13 @@ final class ApiLogListViewModel: ObservableObject {
             source = apiLogs
         case .eventTracker:
             source = eventTrackerLogs
+        case .thirdParty:
+            source = thirdPartyLogs
         }
 
         let query = searchText.maxCharacter(50).trimmingCharacters(in: .whitespacesAndNewlines)
         var filtered = source
-        if logType == .api, query.count >= 3 {
+        if logType.isHTTP, query.count >= 3 {
             filtered = source.filter { $0.url.localizedCaseInsensitiveContains(query) }
         }
 
@@ -81,8 +101,12 @@ final class ApiLogListViewModel: ObservableObject {
     // MARK: - Actions
 
     func switchTo(_ type: LogEventType) {
-        // Guard against switching to EventTracker when it isn't enabled.
+        // Guard against switching to a bucket that isn't enabled.
         if type == .eventTracker, !isEventTrackerLogEnabled {
+            switchTo(.api)
+            return
+        }
+        if type == .thirdParty, !isThirdPartyTrackerEnabled {
             switchTo(.api)
             return
         }

@@ -36,6 +36,27 @@ extension ApiLog {
         )
     }
 
+    /// An intercepted 3rd-party request — raw payload rather than a dictionary,
+    /// which is what the tracker produces.
+    static var previewThirdPartySample: ApiLog {
+        ApiLog(
+            responseCode: "200",
+            method: "POST",
+            url: "https://api2.branch.io/v1/install",
+            responseTime: "0.311",
+            size: "412",
+            date: Date().addingTimeInterval(-30),
+            responseHeader: ["Content-Type": "application/json"],
+            responseBody: #"{"session_id":"1122334455","identity_id":"9988776655","link":"https://example.app.link/abc"}"#,
+            requestHeader: [
+                "Content-Type": "application/x-www-form-urlencoded",
+                "User-Agent": "MyApp/1.0"
+            ],
+            requestBody: [:],
+            requestBodyText: "branch_key=key_live_abc123&hardware_id=8D5F1C&app_version=1.0"
+        )
+    }
+
     /// A mixed list (success / not-found / server error) for list previews.
     static var previewSamples: [ApiLog] {
         [

@@ -17,6 +17,11 @@ public struct ApiLog {
     public var requestHeader: [String: Any]
     public var requestBody: [String: Any]
 
+    /// Raw request payload, used when the body isn't a dictionary — form-encoded,
+    /// multipart or binary bodies captured by the 3rd-party tracker, for example.
+    /// When set it takes precedence over `requestBody` for display and export.
+    public var requestBodyText: String?
+
     public init(
         responseCode: String,
         method: String,
@@ -27,7 +32,8 @@ public struct ApiLog {
         responseHeader: [String: Any],
         responseBody: String,
         requestHeader: [String: Any],
-        requestBody: [String: Any]
+        requestBody: [String: Any],
+        requestBodyText: String? = nil
     ) {
         self.responseCode = responseCode
         self.method = method
@@ -39,6 +45,7 @@ public struct ApiLog {
         self.responseBody = responseBody
         self.requestHeader = requestHeader
         self.requestBody = requestBody
+        self.requestBodyText = requestBodyText
     }
 
     /// Analytics-style event entry (e.g. AppsFlyer) — no real HTTP fields.

@@ -40,6 +40,38 @@ extension Data {
     }
 }
 
+extension URLRequest {
+
+    /// The complete request payload.
+    ///
+    /// By the time a `URLProtocol` sees a request the URL Loading System has
+    /// usually moved the payload out of `httpBody` and into `httpBodyStream`, so
+    /// reading `httpBody` alone yields `nil` for most real traffic.
+    ///
+    /// Draining the stream **consumes** it, so the caller must re-attach the
+    /// returned data as `httpBody` on the request it forwards — otherwise the
+    /// body is silently lost. Reads to completion rather than to a cap for that
+    /// reason; `ApiLogURLProtocol` keeps oversized uploads out of here by
+    /// declining to intercept them in the first place.
+    func apilogkit_drainBody() -> Data? {
+        if let httpBody { return httpBody }
+        guard let stream = httpBodyStream else { return nil }
+
+        stream.open()
+        defer { stream.close() }
+
+        var data = Data()
+        let bufferSize = 8_192
+        var buffer = [UInt8](repeating: 0, count: bufferSize)
+        while stream.hasBytesAvailable {
+            let read = stream.read(&buffer, maxLength: bufferSize)
+            guard read > 0 else { break }
+            data.append(buffer, count: read)
+        }
+        return data.isEmpty ? nil : data
+    }
+}
+
 extension Date {
 
     /// Row-timestamp format used across the log screens

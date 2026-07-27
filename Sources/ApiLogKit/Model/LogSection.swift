@@ -39,7 +39,7 @@ public enum LogSection: Int, CaseIterable {
         case .requestURL, .requestBody, .responseBody:
             return true
         case .requestHeader, .responseHeader:
-            return logType == .api
+            return logType.isHTTP
         }
     }
 }

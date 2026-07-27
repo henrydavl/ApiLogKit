@@ -25,7 +25,7 @@ struct ApiLogRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if logType == .api {
+            if logType.isHTTP {
                 HStack(spacing: 8) {
                     Text(log.responseCode)
                         .font(.system(size: 13, weight: .bold))

@@ -24,7 +24,7 @@ public struct ApiLogListView: View {
     public var body: some View {
         NavigationView {
             list
-                .navigationTitle(viewModel.logType == .api ? "API Logs" : "EventTracker")
+                .navigationTitle(viewModel.title)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
@@ -91,6 +91,17 @@ public struct ApiLogListView: View {
                     Label(
                         "EventTracker",
                         systemImage: viewModel.logType == .eventTracker ? "checkmark" : "chart.line.uptrend.xyaxis"
+                    )
+                }
+            }
+
+            if viewModel.isThirdPartyTrackerEnabled {
+                Button {
+                    viewModel.switchTo(.thirdParty)
+                } label: {
+                    Label(
+                        "3rd Party",
+                        systemImage: viewModel.logType == .thirdParty ? "checkmark" : "shippingbox"
                     )
                 }
             }

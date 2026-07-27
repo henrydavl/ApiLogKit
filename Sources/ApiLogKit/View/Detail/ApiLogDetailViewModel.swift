@@ -37,7 +37,11 @@ final class ApiLogDetailViewModel: ObservableObject {
         self.log = log
         self.logType = logType
         self.sections = LogSection.allCases.filter { $0.isAvailable(for: logType) }
-        let requestJSON = JSONNode.from(dictionary: log.requestBody)
+        // Intercepted logs carry a raw payload instead of a dictionary; parse it
+        // so JSON bodies still get the tree viewer, and fall through to plain text
+        // for form-encoded or binary payloads.
+        let requestJSON = log.requestBodyText.flatMap { JSONNode.parse($0) }
+            ?? JSONNode.from(dictionary: log.requestBody)
         let responseJSON = JSONNode.parse(log.responseBody)
         self.requestJSON = requestJSON
         self.responseJSON = responseJSON
@@ -49,7 +53,9 @@ final class ApiLogDetailViewModel: ObservableObject {
 
         // Body text mode: prefer pretty-printed JSON when the body parses,
         // otherwise fall back to the original payload.
-        let requestBodyText = requestJSON?.prettyPrinted() ?? Self.keyValueDump(log.requestBody)
+        let requestBodyText = requestJSON?.prettyPrinted()
+            ?? log.requestBodyText
+            ?? Self.keyValueDump(log.requestBody)
         let responseBodyText = responseJSON?.prettyPrinted() ?? log.responseBody
         let requestBody = Self.chunked([Log(key: "", value: requestBodyText)])
         let responseBody = Self.chunked([Log(key: "", value: responseBodyText)])
@@ -101,7 +107,7 @@ final class ApiLogDetailViewModel: ObservableObject {
         switch section {
         case .requestURL:     return log.url
         case .requestHeader:  return "\(log.requestHeader)"
-        case .requestBody:    return requestJSON?.prettyPrinted() ?? "\(log.requestBody)"
+        case .requestBody:    return requestJSON?.prettyPrinted() ?? log.requestBodyText ?? "\(log.requestBody)"
         case .responseHeader: return "\(log.responseHeader)"
         case .responseBody:   return responseJSON?.prettyPrinted() ?? log.responseBody
         }

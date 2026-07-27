@@ -14,6 +14,8 @@ logs (plus analytics events such as AppsFlyer) and presents them in a debug UI w
 - 📎 Copy any value, subtree, or section with toast confirmation
 - 🧭 Floating scroll-to-top/bottom buttons on long payloads
 - 📳 Shake to open — one-line setup, works from any screen, no boilerplate
+- 📦 3rd-party traffic tracker — capture `URLSession` calls from closed-source SDKs
+  you have no call site for, in their own tab
 
 Requires **iOS 15+**. No third-party dependencies.
 
@@ -119,6 +121,65 @@ ApiLogger.shared.addEventTrackerLog(
     ApiLog(eventName: "purchase_completed", requestBody: params, responseBody: response)
 )
 ```
+
+## 3rd-party traffic tracker
+
+`addLog` only reaches traffic you have a call site for. For a closed-source SDK you have
+neither the request nor the response — so the tracker intercepts at the URL Loading System
+level instead, with a `URLProtocol`, and files what it finds under a separate **3rd Party**
+tab. Your own API keeps flowing through `addLog` into **API Logs** exactly as before.
+
+```swift
+// AppDelegate — as early as possible, and before any SDK initialises.
+// Only sessions created *after* this call are intercepted.
+
+// Your own API hosts. Skipped entirely, so they aren't duplicated into the
+// 3rd-party tab and their networking is left completely untouched.
+ApiLogKitConfig.thirdPartyTracker.ignoredHosts = ["api.myapp.com"]
+
+ApiLogger.shared.enableThirdPartyTracker(isDevelopmentBuild)
+```
+
+Everything not excluded is captured — status code, timing, both sets of headers, and both
+bodies, with the same JSON viewer and cURL export as the other tabs.
+
+### Filtering
+
+```swift
+// Allowlist — when non-empty, only these hosts are captured.
+ApiLogKitConfig.thirdPartyTracker.allowedHosts = ["appsflyer.com", "api2.branch.io"]
+
+// Final say, if the host lists aren't enough.
+ApiLogKitConfig.thirdPartyTracker.shouldCapture = { request in
+    request.httpMethod != "OPTIONS"
+}
+
+// Retention. Unlike the manual tabs this one fills on its own.
+ApiLogKitConfig.thirdPartyTracker.maxBodyBytes = 512 * 1024  // per body
+ApiLogKitConfig.thirdPartyTracker.maxEntries = 500           // oldest dropped first
+```
+
+Host matching is suffix-based, so `example.com` also covers `api.example.com`.
+
+### Limitations
+
+Interception re-issues each request on an ApiLogKit-owned `URLSession`. That has real
+consequences — worth reading before turning it on:
+
+- **Certificate pinning breaks.** An SDK that pins via its own session delegate will fail
+  its check while the tracker is on, because the request no longer runs on that session.
+  Put such SDKs in `ignoredHosts`. This is inherent to the approach, not a bug.
+- **Redirects are always followed.** An SDK that deliberately blocks redirects via its
+  delegate no longer can.
+- **Timing must be right.** Sessions built before `enableThirdPartyTracker(_:)` are never
+  intercepted, and an SDK that assigns `configuration.protocolClasses` wholesale after
+  creating its configuration drops the interceptor.
+- **Not everything is `URLSession`.** Background sessions, `Network.framework`, gRPC, raw
+  sockets and `WKWebView` traffic are all invisible to this.
+- **Large uploads are skipped.** A request declaring more than 10 MB via `Content-Length`
+  is left alone, since capturing a streamed body means buffering it.
+
+Treat it as a dev-build tool — gate it the same way you gate `isEnabled`.
 
 ## License
 

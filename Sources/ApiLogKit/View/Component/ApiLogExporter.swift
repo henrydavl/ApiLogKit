@@ -18,8 +18,12 @@ enum ApiLogExporter {
         }
 
         output += "---------- Request Body\n"
-        for (_, value) in log.requestBody {
-            output += "\(String(describing: value).jsonize())\n"
+        if let bodyText = log.requestBodyText {
+            output += "\(bodyText.jsonize())\n"
+        } else {
+            for (_, value) in log.requestBody {
+                output += "\(String(describing: value).jsonize())\n"
+            }
         }
 
         output += "\n---------- Response Header\n"
@@ -43,7 +47,10 @@ enum ApiLogExporter {
             curl += "  -H '\(key): \(headerValue)' \\\n"
         }
 
-        if !log.requestBody.isEmpty {
+        if let bodyText = log.requestBodyText, !bodyText.isEmpty {
+            // Raw payload — emit it verbatim rather than as key=value pairs.
+            curl += "  --data '\(bodyText.replacingOccurrences(of: "'", with: "\\'"))' \\\n"
+        } else if !log.requestBody.isEmpty {
             for (key, value) in log.requestBody {
                 let formValue = String(describing: value).replacingOccurrences(of: "'", with: "\\'")
                 curl += "  --data '\(key)=\(formValue)' \\\n"
