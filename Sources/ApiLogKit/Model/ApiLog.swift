@@ -5,7 +5,15 @@
 
 import Foundation
 
-public struct ApiLog {
+public struct ApiLog: Identifiable {
+    /// Stable identity, assigned once when the entry is created.
+    ///
+    /// The list rebuilds its rows on every logger emission, so this must not be
+    /// derived from the log's contents or regenerated on rebuild — SwiftUI uses
+    /// it to match old rows to new ones, and a changing id tears down the row
+    /// (popping any detail screen pushed from it).
+    public let id = UUID()
+
     public var responseCode: String
     public var method: String
     public var url: String

@@ -8,9 +8,11 @@
 import Combine
 import Foundation
 
-/// Identifiable wrapper so `ApiLog` (a plain struct) can be used in `ForEach`.
+/// Identifiable wrapper so `ApiLog` can be used in `ForEach`.
 struct ApiLogItem: Identifiable {
-    let id = UUID()
+    /// Mirrors the log's own identity — see `ApiLog.id`. Generating a fresh id
+    /// here would give every row a new identity on each reload.
+    var id: UUID { log.id }
     let log: ApiLog
 }
 
@@ -19,6 +21,14 @@ final class ApiLogListViewModel: ObservableObject {
     @Published var searchText: String = ""
     @Published private(set) var logType: LogEventType = .api
 
+    /// When paused, incoming logs are still collected but the list stops
+    /// refreshing, so reading a log isn't disturbed by live traffic.
+    @Published private(set) var isPaused: Bool = false
+
+    /// Number of logs in the current bucket that arrived since the list was
+    /// last refreshed. Only meaningful while paused.
+    @Published private(set) var pendingCount: Int = 0
+
     /// Live mirrors of the logger's data, kept up to date via Combine so logs
     /// added while this screen is on-screen (e.g. from Developer Options) show
     /// up without closing and reopening the inspector.
@@ -26,6 +36,10 @@ final class ApiLogListViewModel: ObservableObject {
     private var eventTrackerLogs: [ApiLog] = []
     private var thirdPartyLogs: [ApiLog] = []
     private var cancellables = Set<AnyCancellable>()
+
+    /// Size of the source bucket at the time `items` was last built, used to
+    /// derive `pendingCount` while paused.
+    private var renderedSourceCount: Int = 0
 
     var isEventTrackerLogEnabled: Bool { ApiLogger.shared.isEventTrackerLogEnabled }
     var isThirdPartyTrackerEnabled: Bool { ApiLogger.shared.isThirdPartyTrackerEnabled }
@@ -47,7 +61,7 @@ final class ApiLogListViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] logs in
                 self?.apiLogs = logs
-                self?.reload()
+                self?.reloadIfLive()
             }
             .store(in: &cancellables)
 
@@ -55,7 +69,7 @@ final class ApiLogListViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] logs in
                 self?.eventTrackerLogs = logs
-                self?.reload()
+                self?.reloadIfLive()
             }
             .store(in: &cancellables)
 
@@ -63,7 +77,7 @@ final class ApiLogListViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] logs in
                 self?.thirdPartyLogs = logs
-                self?.reload()
+                self?.reloadIfLive()
             }
             .store(in: &cancellables)
 
@@ -77,16 +91,26 @@ final class ApiLogListViewModel: ObservableObject {
 
     // MARK: - Data
 
-    func reload() {
-        let source: [ApiLog]
+    private var currentSource: [ApiLog] {
         switch logType {
-        case .api:
-            source = apiLogs
-        case .eventTracker:
-            source = eventTrackerLogs
-        case .thirdParty:
-            source = thirdPartyLogs
+        case .api:          return apiLogs
+        case .eventTracker: return eventTrackerLogs
+        case .thirdParty:   return thirdPartyLogs
         }
+    }
+
+    /// Applies a live logger update, unless the user paused the stream — in
+    /// which case only the pending badge moves.
+    private func reloadIfLive() {
+        guard !isPaused else {
+            pendingCount = max(0, currentSource.count - renderedSourceCount)
+            return
+        }
+        reload()
+    }
+
+    func reload() {
+        let source = currentSource
 
         let query = searchText.maxCharacter(50).trimmingCharacters(in: .whitespacesAndNewlines)
         var filtered = source
@@ -96,9 +120,22 @@ final class ApiLogListViewModel: ObservableObject {
 
         // Newest first, matching the legacy `logs.reverse()`.
         items = filtered.reversed().map { ApiLogItem(log: $0) }
+        renderedSourceCount = source.count
+        pendingCount = 0
     }
 
     // MARK: - Actions
+
+    /// Toggles the live stream. Resuming immediately folds in whatever arrived
+    /// while paused.
+    func togglePause() {
+        isPaused.toggle()
+        if isPaused {
+            pendingCount = max(0, currentSource.count - renderedSourceCount)
+        } else {
+            reload()
+        }
+    }
 
     func switchTo(_ type: LogEventType) {
         // Guard against switching to a bucket that isn't enabled.
@@ -118,6 +155,8 @@ final class ApiLogListViewModel: ObservableObject {
     func clear() {
         ApiLogger.shared.clearLogs()
         items = []
+        renderedSourceCount = 0
+        pendingCount = 0
     }
 
     // MARK: - Export

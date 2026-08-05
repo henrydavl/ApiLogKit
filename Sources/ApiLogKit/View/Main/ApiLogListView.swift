@@ -35,6 +35,9 @@ public struct ApiLogListView: View {
                         }
                     }
                     ToolbarItem(placement: .navigationBarTrailing) {
+                        pauseButton
+                    }
+                    ToolbarItem(placement: .navigationBarTrailing) {
                         menu
                     }
                 }
@@ -58,6 +61,15 @@ public struct ApiLogListView: View {
     // MARK: - List
 
     private var list: some View {
+        listContent
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if viewModel.isPaused {
+                    pausedBanner
+                }
+            }
+    }
+
+    private var listContent: some View {
         List {
             ForEach(viewModel.items) { item in
                 ZStack {
@@ -72,6 +84,35 @@ public struct ApiLogListView: View {
             }
         }
         .listStyle(.plain)
+    }
+
+    // MARK: - Live stream controls
+
+    private var pauseButton: some View {
+        Button {
+            viewModel.togglePause()
+        } label: {
+            Image(systemName: viewModel.isPaused ? "play.circle" : "pause.circle")
+        }
+        .accessibilityLabel(viewModel.isPaused ? "Resume live logs" : "Pause live logs")
+    }
+
+    /// Shown while paused so the list isn't silently stale.
+    private var pausedBanner: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "pause.fill")
+            Text(viewModel.pendingCount > 0
+                 ? "Paused — \(viewModel.pendingCount) new"
+                 : "Paused")
+            Spacer()
+            Button("Resume") { viewModel.togglePause() }
+                .font(.caption.weight(.semibold))
+        }
+        .font(.caption)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
+        .background(Color.orange.opacity(0.15))
     }
 
     // MARK: - Menu
