@@ -13,6 +13,10 @@ public struct ApiLogListView: View {
     @State private var showClearConfirmation = false
     @State private var showDevOptions = false
 
+    /// Drives the detail push. Held here rather than in the rows so that list
+    /// churn from live logs can't tear the pushed screen down — see `detailLink`.
+    @State private var selectedLog: ApiLog?
+
     /// Optional close handler, used when the screen is presented modally.
     private let onClose: (() -> Void)?
 
@@ -42,6 +46,7 @@ public struct ApiLogListView: View {
                     }
                 }
                 .searchable(text: $viewModel.searchText, prompt: "Search URL")
+                .background(detailLink)
                 .background(devOptionsLink)
         }
         .navigationViewStyle(.stack)
@@ -72,18 +77,46 @@ public struct ApiLogListView: View {
     private var listContent: some View {
         List {
             ForEach(viewModel.items) { item in
-                ZStack {
+                // A plain Button, not a NavigationLink: the push is owned by
+                // `detailLink` outside the list.
+                Button {
+                    selectedLog = item.log
+                } label: {
                     ApiLogRowView(log: item.log, logType: viewModel.logType)
-                    NavigationLink {
-                        ApiLogDetailView(log: item.log, logType: viewModel.logType)
-                    } label: { EmptyView() }
-                    .opacity(0)
                 }
+                .buttonStyle(.plain)
                 .listRowSeparator(.hidden)
                 .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
             }
         }
         .listStyle(.plain)
+    }
+
+    // MARK: - Detail navigation
+
+    /// A single link living outside the `List`, activated by `selectedLog`.
+    ///
+    /// A `NavigationLink` placed *inside* a `ForEach` row loses its active state
+    /// whenever the list re-diffs — which, with live logs streaming in, pops the
+    /// detail screen back to the list every time an entry arrives. Hoisting the
+    /// link out means row churn can't reach it.
+    private var detailLink: some View {
+        NavigationLink(isActive: isShowingDetail) {
+            if let selectedLog {
+                ApiLogDetailView(log: selectedLog, logType: viewModel.logType)
+            }
+        } label: {
+            EmptyView()
+        }
+    }
+
+    private var isShowingDetail: Binding<Bool> {
+        Binding(
+            get: { selectedLog != nil },
+            set: { isActive in
+                if !isActive { selectedLog = nil }
+            }
+        )
     }
 
     // MARK: - Live stream controls
