@@ -6,12 +6,17 @@
 //
 
 import SwiftUI
+import UIKit
 
 public struct ApiLogListView: View {
     @StateObject private var viewModel: ApiLogListViewModel
     @State private var shareItem: ShareItem?
     @State private var showClearConfirmation = false
     @State private var showDevOptions = false
+
+    // Copy confirmation toast.
+    @State private var toastMessage: String?
+    @State private var toastWorkItem: DispatchWorkItem?
 
     /// Drives the detail push. Held here rather than in the rows so that list
     /// churn from live logs can't tear the pushed screen down — see `detailLink`.
@@ -61,6 +66,44 @@ public struct ApiLogListView: View {
             Button("Clear", role: .destructive) { viewModel.clear() }
             Button("Cancel", role: .cancel) {}
         }
+        .overlay(alignment: .bottom) {
+            if let toastMessage {
+                toastBubble(toastMessage)
+            }
+        }
+    }
+
+    // MARK: - Copy + toast
+
+    /// Writes the pasteboard directly rather than going through the share sheet,
+    /// whose copy activity data-detects the leading request URL and pastes it
+    /// alone into anything that prefers a URL.
+    private func copy(_ text: String) {
+        UIPasteboard.general.string = text
+        toastWorkItem?.cancel()
+        withAnimation(.easeInOut(duration: 0.2)) { toastMessage = "Copied to clipboard" }
+
+        let item = DispatchWorkItem {
+            withAnimation(.easeInOut(duration: 0.2)) { toastMessage = nil }
+        }
+        toastWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: item)
+    }
+
+    private func toastBubble(_ message: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+            Text(message)
+                .font(.system(size: 14, weight: .medium))
+        }
+        .foregroundColor(Color(.systemBackground))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color(.label).opacity(0.9))
+        .clipShape(Capsule())
+        .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+        .padding(.bottom, 32)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
     // MARK: - List
@@ -306,9 +349,15 @@ public struct ApiLogListView: View {
             }
 
             Button {
+                copy(viewModel.exportText())
+            } label: {
+                Label("Copy Logs", systemImage: "doc.on.doc")
+            }
+
+            Button {
                 shareItem = ShareItem(text: viewModel.exportText())
             } label: {
-                Label("Export", systemImage: "square.and.arrow.up")
+                Label("Share Logs…", systemImage: "square.and.arrow.up")
             }
 
             if viewModel.isDevOptionsEnabled {
