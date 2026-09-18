@@ -29,6 +29,9 @@ final class ApiLogListViewModel: ObservableObject {
     /// last refreshed. Only meaningful while paused.
     @Published private(set) var pendingCount: Int = 0
 
+    /// Status / method / host facets applied on top of the search query.
+    @Published private(set) var filter = ApiLogFilter()
+
     /// Live mirrors of the logger's data, kept up to date via Combine so logs
     /// added while this screen is on-screen (e.g. from Developer Options) show
     /// up without closing and reopening the inspector.
@@ -117,6 +120,9 @@ final class ApiLogListViewModel: ObservableObject {
         if logType.isHTTP, query.count >= 3 {
             filtered = source.filter { $0.url.localizedCaseInsensitiveContains(query) }
         }
+        if filter.isActive {
+            filtered = filtered.filter { filter.matches($0) }
+        }
 
         // Newest first, matching the legacy `logs.reverse()`.
         items = filtered.reversed().map { ApiLogItem(log: $0) }
@@ -149,6 +155,47 @@ final class ApiLogListViewModel: ObservableObject {
         }
         guard type != logType else { return }
         logType = type
+        // Facets are derived from the bucket's own contents — a host carried over
+        // from another tab would filter everything out with no obvious cause.
+        filter = ApiLogFilter()
+        reload()
+    }
+
+    // MARK: - Filtering
+
+    /// EventTracker entries are synthesised and carry no status code or host, so
+    /// those facets are hidden for that bucket.
+    var showsStatusFilter: Bool { logType.isHTTP }
+
+    /// Methods present in the current bucket, so the menu only offers values
+    /// that can actually match.
+    var availableMethods: [String] {
+        Set(currentSource.map { $0.method.uppercased() }).sorted()
+    }
+
+    /// Hosts present in the current bucket.
+    var availableHosts: [String] {
+        Set(currentSource.compactMap { $0.host }).sorted()
+    }
+
+    func toggleStatus(_ status: StatusClass) {
+        filter.toggle(status, in: \.statuses)
+        reload()
+    }
+
+    func toggleMethod(_ method: String) {
+        filter.toggle(method.uppercased(), in: \.methods)
+        reload()
+    }
+
+    func toggleHost(_ host: String) {
+        filter.toggle(host.lowercased(), in: \.hosts)
+        reload()
+    }
+
+    func clearFilters() {
+        guard filter.isActive else { return }
+        filter = ApiLogFilter()
         reload()
     }
 
