@@ -5,6 +5,7 @@
 //  Created by Henry David Lie on 10/06/26.
 //
 
+import Combine
 import Foundation
 
 /// Identifiable wrapper around `Log` for use in `ForEach`.
@@ -16,27 +17,66 @@ struct ApiLogDetailRow: Identifiable {
 }
 
 final class ApiLogDetailViewModel: ObservableObject {
-    let log: ApiLog
+    /// Republished so the screen fills in when an entry opened while in flight
+    /// gets its response.
+    @Published private(set) var log: ApiLog
+
     let logType: LogEventType
     let sections: [LogSection]
 
     /// Parsed JSON for the body sections (nil when the body isn't JSON).
-    let requestJSON: JSONNode?
-    let responseJSON: JSONNode?
+    private(set) var requestJSON: JSONNode?
+    private(set) var responseJSON: JSONNode?
 
     /// Expansion-state models for the JSON tree views (shared between the tree
     /// and its expand/collapse controls so the controls stay in a stable row).
-    let requestTree: JSONTreeModel?
-    let responseTree: JSONTreeModel?
+    private(set) var requestTree: JSONTreeModel?
+    private(set) var responseTree: JSONTreeModel?
 
     private var rowsBySection: [LogSection: [ApiLogDetailRow]] = [:]
+    private var cancellables = Set<AnyCancellable>()
 
     private static let chunkSize = 2_000
+
+    /// True while the request is still in flight — the response sections are
+    /// empty because there's nothing to show yet, not because anything is wrong.
+    var isPending: Bool { log.state == .pending }
 
     init(log: ApiLog, logType: LogEventType) {
         self.log = log
         self.logType = logType
         self.sections = LogSection.allCases.filter { $0.isAvailable(for: logType) }
+        rebuild()
+        observeCompletion()
+    }
+
+    // MARK: - Live updates
+
+    /// Watches this one entry for its pending → finished transition.
+    ///
+    /// Deliberately cheap: once the entry is finished the first guard fails
+    /// immediately, so a busy logger emitting on every request costs nothing
+    /// here. An entry only ever completes once, so there's nothing else to
+    /// watch for.
+    private func observeCompletion() {
+        guard isPending else { return }
+
+        ApiLogger.shared.publisher(for: logType)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] logs in
+                guard let self, self.isPending,
+                      let updated = logs.first(where: { $0.id == self.log.id }),
+                      updated.state == .finished
+                else { return }
+
+                self.log = updated
+                self.rebuild()
+            }
+            .store(in: &cancellables)
+    }
+
+    /// Re-derives every display value from `log`.
+    private func rebuild() {
         // Intercepted logs carry a raw payload instead of a dictionary; parse it
         // so JSON bodies still get the tree viewer, and fall through to plain text
         // for form-encoded or binary payloads.
