@@ -226,6 +226,45 @@ public final class ApiLogger {
         }
     }
 
+    // MARK: - Persistence
+
+    /// Keeps logs across app launches by writing them to Application Support.
+    ///
+    /// Opt-in, and worth a moment's thought before switching on: it puts captured
+    /// request and response bodies — including any `Authorization` headers and
+    /// tokens they contain — on disk, where they outlive the process. Gate it the
+    /// same way you gate `isEnabled`, and see `ApiLogKitConfig.persistence` for
+    /// the retention budget.
+    ///
+    /// Call at launch. Anything already on disk is loaded immediately, ahead of
+    /// logs recorded in this session; writes are debounced and flushed when the
+    /// app backgrounds. Entries still in flight at exit aren't persisted, since a
+    /// restored pending entry could never complete.
+    public func enablePersistence(_ isEnabled: Bool) {
+        if isEnabled {
+            LogPersistence.shared.enable()
+        } else {
+            LogPersistence.shared.disable()
+        }
+    }
+
+    /// Deletes the on-disk archive, leaving the in-memory buckets alone.
+    public func clearPersistedLogs() {
+        LogPersistence.shared.deleteArchive()
+    }
+
+    /// Seeds the buckets with entries loaded from disk.
+    ///
+    /// Restored logs are older than anything recorded in this session, so they go
+    /// in front — the list sorts by insertion order.
+    func restore(api: [ApiLog], eventTracker: [ApiLog], thirdParty: [ApiLog]) {
+        queue.async {
+            self.logsSubject.value = api + self.logsSubject.value
+            self.eventTrackerSubject.value = eventTracker + self.eventTrackerSubject.value
+            self.thirdPartySubject.value = thirdParty + self.thirdPartySubject.value
+        }
+    }
+
     /// Installs a shake gesture that automatically presents the log inspector
     /// from any screen — no `motionEnded` override needed in the host app.
     /// Call this once during app startup (e.g. AppDelegate / SceneDelegate).
