@@ -23,19 +23,27 @@ struct ApiLogRowView: View {
         log.date.apiLogFormatted()
     }
 
+    private var isPending: Bool { log.state == .pending }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if logType.isHTTP {
                 HStack(spacing: 8) {
-                    Text(log.responseCode)
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(statusColor)
-                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    if isPending {
+                        pendingBadge
+                    } else {
+                        Text(log.responseCode)
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(statusColor)
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
                     Spacer()
-                    Text(responseTimeText)
+                    // An in-flight request has no duration yet — showing "0.00 s"
+                    // would read as an impossibly fast response.
+                    Text(isPending ? "—" : responseTimeText)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.secondary)
                 }
@@ -61,8 +69,28 @@ struct ApiLogRowView: View {
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color(.systemGray4), lineWidth: 1)
+                .stroke(isPending ? Color.accentColor.opacity(0.5) : Color(.systemGray4),
+                        lineWidth: 1)
         )
+        // Dim the whole row while in flight, so completed entries are what the
+        // eye lands on when scanning.
+        .opacity(isPending ? 0.55 : 1)
+    }
+
+    /// Stands in for the status badge until a real code arrives.
+    private var pendingBadge: some View {
+        HStack(spacing: 5) {
+            ProgressView()
+                .scaleEffect(0.6)
+                .frame(width: 10, height: 10)
+            Text("Pending")
+                .font(.system(size: 12, weight: .semibold))
+        }
+        .foregroundColor(.white)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Color.gray)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 
     private var statusColor: Color {
@@ -78,9 +106,10 @@ struct ApiLogRowView: View {
 #if DEBUG
 #Preview {
     VStack(spacing: 12) {
-        ApiLogRowView(log: .previewSamples[0], logType: .api)
+        ApiLogRowView(log: .previewPendingSample, logType: .api)
         ApiLogRowView(log: .previewSamples[1], logType: .api)
         ApiLogRowView(log: .previewSamples[2], logType: .api)
+        ApiLogRowView(log: .previewSamples[3], logType: .api)
     }
     .padding()
 }

@@ -57,9 +57,20 @@ extension ApiLog {
         )
     }
 
-    /// A mixed list (success / not-found / server error) for list previews.
+    /// A request still in flight, for previewing the pending row treatment.
+    static var previewPendingSample: ApiLog {
+        ApiLog(
+            method: "POST",
+            url: "https://api.bri.co.id/v1/payment/inquiry",
+            requestHeader: ["Accept": "application/json"],
+            requestBody: ["amount": 25000]
+        )
+    }
+
+    /// A mixed list (pending / success / not-found / server error) for list previews.
     static var previewSamples: [ApiLog] {
         [
+            previewPendingSample,
             previewSample,
             ApiLog(
                 responseCode: "404",
