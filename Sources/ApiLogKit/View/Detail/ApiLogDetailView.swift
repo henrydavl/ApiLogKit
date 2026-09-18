@@ -219,17 +219,36 @@ struct ApiLogDetailView: View {
 
     // MARK: - Export menu
 
+    /// Copying goes straight to the pasteboard rather than through the share
+    /// sheet. Every export starts with the request URL, and the sheet's copy
+    /// activity data-detects that and writes a `public.url` representation
+    /// alongside the text — so pasting into anything that prefers a URL yielded
+    /// the URL alone instead of the log. Setting `UIPasteboard.string` writes
+    /// plain text and nothing else.
     private var exportMenu: some View {
         Menu {
             Button {
+                copy(viewModel.exportRawLog())
+            } label: {
+                Label("Copy Raw Log", systemImage: "doc.on.doc")
+            }
+            Button {
+                copy(viewModel.exportCurl())
+            } label: {
+                Label("Copy cURL Command", systemImage: "doc.on.doc")
+            }
+
+            Divider()
+
+            Button {
                 shareItem = ShareItem(text: viewModel.exportRawLog())
             } label: {
-                Label("Raw Log", systemImage: "doc.plaintext")
+                Label("Share Raw Log…", systemImage: "doc.plaintext")
             }
             Button {
                 shareItem = ShareItem(text: viewModel.exportCurl())
             } label: {
-                Label("cURL Command", systemImage: "terminal")
+                Label("Share cURL Command…", systemImage: "terminal")
             }
         } label: {
             Image(systemName: "square.and.arrow.up")
