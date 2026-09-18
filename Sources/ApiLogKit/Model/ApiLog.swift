@@ -50,6 +50,13 @@ public struct ApiLog: Identifiable {
     /// produce `.pending` entries.
     public var state: ApiLogState = .finished
 
+    /// Whether this entry was loaded from disk rather than recorded in this
+    /// session — see `ApiLogger.enablePersistence(_:)`.
+    ///
+    /// Set only by the restore path, so anything the host app records is false
+    /// by definition.
+    public private(set) var isRestored: Bool = false
+
     public init(
         responseCode: String,
         method: String,
@@ -81,6 +88,12 @@ public struct ApiLog: Identifiable {
     mutating func restoreIdentity(id: UUID, date: Date) {
         self.id = id
         self.date = date
+    }
+
+    /// Flags this entry as coming from a previous session. Applied by
+    /// `ApiLogger.restore(api:eventTracker:thirdParty:)`.
+    mutating func markRestored() {
+        isRestored = true
     }
 
     /// In-flight entry: the request side is known, the response side isn't yet.
