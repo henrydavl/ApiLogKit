@@ -5,6 +5,14 @@
 
 import Foundation
 
+/// Lifecycle of a logged exchange.
+public enum ApiLogState {
+    /// Request sent, no response yet. The response fields are placeholders.
+    case pending
+    /// The exchange finished — successfully or not. `responseCode` tells which.
+    case finished
+}
+
 public struct ApiLog: Identifiable {
     /// Stable identity, assigned once when the entry is created.
     ///
@@ -12,7 +20,11 @@ public struct ApiLog: Identifiable {
     /// derived from the log's contents or regenerated on rebuild — SwiftUI uses
     /// it to match old rows to new ones, and a changing id tears down the row
     /// (popping any detail screen pushed from it).
-    public let id = UUID()
+    ///
+    /// Read-only from outside: the only writer is `restoreIdentity(id:date:)`,
+    /// which exists so a pending entry keeps its identity when its response
+    /// fields are filled in.
+    public private(set) var id = UUID()
 
     public var responseCode: String
     public var method: String
@@ -29,6 +41,14 @@ public struct ApiLog: Identifiable {
     /// multipart or binary bodies captured by the 3rd-party tracker, for example.
     /// When set it takes precedence over `requestBody` for display and export.
     public var requestBodyText: String?
+
+    /// Whether the exchange is still in flight.
+    ///
+    /// Defaults to `.finished`, so entries recorded through `addLog` — which is
+    /// only called once a response exists — keep behaving exactly as before.
+    /// Only the `beginLog`/`completeLog` pair and the 3rd-party interceptor
+    /// produce `.pending` entries.
+    public var state: ApiLogState = .finished
 
     public init(
         responseCode: String,
@@ -54,6 +74,39 @@ public struct ApiLog: Identifiable {
         self.requestHeader = requestHeader
         self.requestBody = requestBody
         self.requestBodyText = requestBodyText
+    }
+
+    /// Carries a pending entry's identity and start time across the wholesale
+    /// field replacement in `ApiLogger.completeLog(_:with:)`.
+    mutating func restoreIdentity(id: UUID, date: Date) {
+        self.id = id
+        self.date = date
+    }
+
+    /// In-flight entry: the request side is known, the response side isn't yet.
+    ///
+    /// Produced by `ApiLogger.beginLog(...)`; the response fields are
+    /// placeholders until `completeLog(_:with:)` fills them in.
+    public init(
+        method: String,
+        url: String,
+        requestHeader: [String: Any] = [:],
+        requestBody: [String: Any] = [:],
+        requestBodyText: String? = nil,
+        date: Date = Date()
+    ) {
+        self.responseCode = ""
+        self.method = method
+        self.url = url
+        self.responseTime = "0"
+        self.size = "0"
+        self.date = date
+        self.responseHeader = [:]
+        self.responseBody = ""
+        self.requestHeader = requestHeader
+        self.requestBody = requestBody
+        self.requestBodyText = requestBodyText
+        self.state = .pending
     }
 
     /// Analytics-style event entry (e.g. AppsFlyer) — no real HTTP fields.

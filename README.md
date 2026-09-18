@@ -7,6 +7,11 @@ An in-app API log inspector for iOS, written in SwiftUI. Records HTTP request/re
 logs (plus analytics events such as AppsFlyer) and presents them in a debug UI with:
 
 - 📋 Log list with URL search, status-code badges, newest-first ordering
+- 🔎 Filter bar — narrow by status class, HTTP method and host, combinable
+- ⏳ In-flight requests — a call appears the moment it's sent, greyed out and
+  marked pending, then fills in when the response lands
+- 💾 Optional persistence — logs survive relaunch, so a crash doesn't take the
+  evidence with it
 - 🌳 Interactive JSON viewer — collapsible objects/arrays with child counts,
   type-colored values, tap-to-expand long strings (base64-safe), expand/collapse all
 - 📝 Tree ⇄ pretty-JSON text toggle per body section
@@ -104,7 +109,65 @@ let controller = ApiLogHostingController(logs: ApiLogger.shared.getLogs())
 present(controller, animated: true)
 ```
 
-### 3. Optional configuration
+### 3. In-flight requests
+
+`addLog` records an exchange that has already finished, so a request that is slow —
+or never answered at all — is invisible until it's over. Bracket the call instead and
+it shows up in the list the moment it's sent, greyed out and marked **Pending**, then
+fills in when the response arrives:
+
+```swift
+let token = ApiLogger.shared.beginLog(
+    method: "POST",
+    url: url,
+    requestHeader: headers,
+    requestBody: parameters
+)
+
+// …once the response lands, from wherever you already build your ApiLog:
+ApiLogger.shared.completeLog(token, with: ApiLog(response: response, parameter: parameters, headers: headers))
+```
+
+The entry keeps its identity and its original start time, so the row fills in where it
+already is rather than jumping to the top of the list. A token that is never completed
+simply stays pending — which is exactly what you want to see when a request hangs.
+
+`addLog` still works untouched for anything you don't want to bracket, and traffic
+captured by the **3rd-party tracker** gets pending rows automatically, with no call
+sites at all.
+
+### 4. Filtering
+
+The list has a filter bar above it: **Status** (2xx / 3xx / 4xx / 5xx / Failed /
+Pending), **Method** and **Host**. Facets combine with AND, values within a facet with
+OR — so `4xx + 5xx` and `POST` shows failed writes only. Method and host menus offer
+only values actually present in the current tab, and filters reset when you switch tabs.
+
+### 5. Persistence
+
+Off by default. When enabled, logs are written to Application Support and reloaded at
+next launch, ahead of the current session's:
+
+```swift
+// Retention budget — set before enabling.
+ApiLogKitConfig.persistence.maxEntries = 200          // per bucket
+ApiLogKitConfig.persistence.maxBodyBytes = 64 * 1024  // per body, truncated with a marker
+
+ApiLogger.shared.enablePersistence(isDevelopmentBuild)
+
+// Wipe the archive without touching the in-memory logs.
+ApiLogger.shared.clearPersistedLogs()
+```
+
+> ⚠️ This puts captured request and response bodies — including any `Authorization`
+> headers or tokens inside them — on disk, where they outlive the process. The file is
+> excluded from backups and written with file protection, but treat persistence as a
+> dev-build feature and gate it exactly like `isEnabled`.
+
+Writes are debounced and flushed when the app backgrounds. Entries still in flight at
+exit aren't persisted, since a restored pending entry could never complete.
+
+### 6. Optional configuration
 
 ```swift
 // Locale for row timestamps (defaults to .current).
@@ -180,6 +243,17 @@ consequences — worth reading before turning it on:
   is left alone, since capturing a streamed body means buffering it.
 
 Treat it as a dev-build tool — gate it the same way you gate `isEnabled`.
+
+## Demo app
+
+`Demo/` holds a small host app that exercises every tab and feature against the local
+package — handy for seeing a change running, or reproducing a bug outside a real app:
+
+```bash
+cd Demo && xcodegen generate && open ApiLogKitDemo.xcodeproj
+```
+
+See [Demo/README.md](Demo/README.md) for what each control demonstrates.
 
 ## License
 

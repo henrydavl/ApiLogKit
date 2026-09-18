@@ -33,6 +33,11 @@ struct ApiLogDetailView: View {
         ScrollViewReader { proxy in
             list
                 .listStyle(.plain)
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if viewModel.isPending {
+                        pendingBanner
+                    }
+                }
                 .overlay(alignment: .bottomTrailing) {
                     floatingButtons(proxy: proxy)
                 }
@@ -60,6 +65,28 @@ struct ApiLogDetailView: View {
             if let toastMessage {
                 toastBubble(toastMessage)
             }
+        }
+    }
+
+    // MARK: - Pending
+
+    /// Explains the empty response sections while the request is in flight.
+    /// Disappears on its own when the entry completes.
+    private var pendingBanner: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .scaleEffect(0.7)
+                    .frame(width: 12, height: 12)
+                Text("Request in flight — the response fills in when it lands")
+                    .font(.caption)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+            .background(Color.accentColor.opacity(0.14))
+            Divider()
         }
     }
 

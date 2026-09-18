@@ -68,28 +68,153 @@ public struct ApiLogListView: View {
     private var list: some View {
         listContent
             .safeAreaInset(edge: .top, spacing: 0) {
-                if viewModel.isPaused {
-                    pausedBanner
+                VStack(spacing: 0) {
+                    if viewModel.isPaused {
+                        pausedBanner
+                    }
+                    filterBar
                 }
             }
     }
 
+    @ViewBuilder
     private var listContent: some View {
-        List {
-            ForEach(viewModel.items) { item in
-                // A plain Button, not a NavigationLink: the push is owned by
-                // `detailLink` outside the list.
-                Button {
-                    selectedLog = item.log
-                } label: {
-                    ApiLogRowView(log: item.log, logType: viewModel.logType)
+        if viewModel.items.isEmpty, viewModel.filter.isActive {
+            emptyState
+        } else {
+            List {
+                ForEach(viewModel.items) { item in
+                    // A plain Button, not a NavigationLink: the push is owned by
+                    // `detailLink` outside the list.
+                    Button {
+                        selectedLog = item.log
+                    } label: {
+                        ApiLogRowView(log: item.log, logType: viewModel.logType)
+                    }
+                    .buttonStyle(.plain)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                 }
-                .buttonStyle(.plain)
-                .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
             }
+            .listStyle(.plain)
         }
-        .listStyle(.plain)
+    }
+
+    /// Shown when filters exclude everything, so a blank list doesn't read as
+    /// "no traffic".
+    private var emptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.system(size: 34))
+                .foregroundColor(.secondary)
+            Text("No logs match the current filter")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            Button("Clear filters") { viewModel.clearFilters() }
+                .font(.subheadline.weight(.semibold))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemBackground))
+    }
+
+    // MARK: - Filter bar
+
+    private var filterBar: some View {
+        VStack(spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    if viewModel.showsStatusFilter {
+                        statusChip
+                    }
+                    if !viewModel.availableMethods.isEmpty {
+                        methodChip
+                    }
+                    if !viewModel.availableHosts.isEmpty {
+                        hostChip
+                    }
+                    if viewModel.filter.isActive {
+                        Button {
+                            viewModel.clearFilters()
+                        } label: {
+                            Text("Clear")
+                                .font(.caption.weight(.semibold))
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            }
+            Divider()
+        }
+        .background(Color(.systemBackground))
+    }
+
+    private var statusChip: some View {
+        Menu {
+            ForEach(StatusClass.allCases, id: \.self) { status in
+                Button {
+                    viewModel.toggleStatus(status)
+                } label: {
+                    Label(
+                        status.title,
+                        systemImage: viewModel.filter.statuses.contains(status) ? "checkmark.circle.fill" : "circle"
+                    )
+                }
+            }
+        } label: {
+            chipLabel("Status", count: viewModel.filter.statuses.count)
+        }
+    }
+
+    private var methodChip: some View {
+        Menu {
+            ForEach(viewModel.availableMethods, id: \.self) { method in
+                Button {
+                    viewModel.toggleMethod(method)
+                } label: {
+                    Label(
+                        method,
+                        systemImage: viewModel.filter.methods.contains(method) ? "checkmark.circle.fill" : "circle"
+                    )
+                }
+            }
+        } label: {
+            chipLabel("Method", count: viewModel.filter.methods.count)
+        }
+    }
+
+    private var hostChip: some View {
+        Menu {
+            ForEach(viewModel.availableHosts, id: \.self) { host in
+                Button {
+                    viewModel.toggleHost(host)
+                } label: {
+                    Label(
+                        host,
+                        systemImage: viewModel.filter.hosts.contains(host) ? "checkmark.circle.fill" : "circle"
+                    )
+                }
+            }
+        } label: {
+            chipLabel("Host", count: viewModel.filter.hosts.count)
+        }
+    }
+
+    private func chipLabel(_ title: String, count: Int) -> some View {
+        HStack(spacing: 4) {
+            Text(count > 0 ? "\(title) (\(count))" : title)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 9, weight: .semibold))
+        }
+        .font(.caption.weight(.medium))
+        .foregroundColor(count > 0 ? .white : .primary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(count > 0 ? Color.accentColor : Color(.secondarySystemBackground))
+        .clipShape(Capsule())
+        .overlay(
+            Capsule().stroke(Color(.systemGray4), lineWidth: count > 0 ? 0 : 1)
+        )
     }
 
     // MARK: - Detail navigation

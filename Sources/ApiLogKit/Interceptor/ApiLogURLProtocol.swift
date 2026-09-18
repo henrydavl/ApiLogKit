@@ -29,6 +29,10 @@ final class ApiLogURLProtocol: URLProtocol {
     private var startDate = Date()
     private var capturedRequestBody: Data?
 
+    /// Handle to the pending list entry inserted when the request goes out, so
+    /// the exchange is visible while it's in flight.
+    private var logToken: ApiLogToken?
+
     // Touched only from the session's (serial) delegate queue.
     private var response: HTTPURLResponse?
     private var capturedResponseBody = Data()
@@ -71,6 +75,19 @@ final class ApiLogURLProtocol: URLProtocol {
         }
         URLProtocol.setProperty(true, forKey: Self.handledKey, in: tagged)
 
+        // Record the request before it goes out — a call that hangs or never
+        // comes back should still be visible in the list while it's happening.
+        logToken = ApiLogger.shared.begin(
+            ApiLog(
+                method: request.httpMethod ?? "GET",
+                url: request.url?.absoluteString ?? "Unknown URL",
+                requestHeader: request.allHTTPHeaderFields ?? [:],
+                requestBodyText: capturedRequestBody?.jsonize(),
+                date: startDate
+            ),
+            in: .thirdParty
+        )
+
         let task = Self.session.dataTask(with: tagged as URLRequest)
         taskLock.lock()
         self.forwardingTask = task
@@ -89,6 +106,27 @@ final class ApiLogURLProtocol: URLProtocol {
         guard let inFlight else { return }
         Self.registry.deregister(inFlight)
         inFlight.cancel()
+
+        // Deregistering means `didComplete` will never fire for this task, so the
+        // pending entry has to be closed here or it stays in flight forever.
+        // `response`/`capturedResponseBody` belong to the delegate queue and
+        // aren't safe to read from here, so the entry records the cancellation
+        // alone.
+        if let logToken {
+            ApiLogger.shared.completeLog(
+                logToken,
+                with: ApiLog(
+                    request: request,
+                    requestBody: capturedRequestBody,
+                    response: nil,
+                    responseBody: Data(),
+                    error: URLError(.cancelled),
+                    duration: Date().timeIntervalSince(startDate),
+                    date: startDate
+                )
+            )
+            self.logToken = nil
+        }
     }
 
     // MARK: - Interception policy
@@ -144,17 +182,24 @@ final class ApiLogURLProtocol: URLProtocol {
         forwardingTask = nil
         taskLock.unlock()
 
-        ApiLogger.shared.addThirdPartyLog(
-            ApiLog(
-                request: request,
-                requestBody: capturedRequestBody,
-                response: response,
-                responseBody: capturedResponseBody,
-                error: error,
-                duration: measuredDuration ?? Date().timeIntervalSince(startDate),
-                date: startDate
-            )
+        let finished = ApiLog(
+            request: request,
+            requestBody: capturedRequestBody,
+            response: response,
+            responseBody: capturedResponseBody,
+            error: error,
+            duration: measuredDuration ?? Date().timeIntervalSince(startDate),
+            date: startDate
         )
+
+        // Fill in the pending entry rather than appending a second one. If it was
+        // trimmed away while in flight, fall back to a plain append.
+        if let logToken {
+            ApiLogger.shared.completeLog(logToken, with: finished)
+            self.logToken = nil
+        } else {
+            ApiLogger.shared.addThirdPartyLog(finished)
+        }
 
         if let error {
             client?.urlProtocol(self, didFailWithError: error)

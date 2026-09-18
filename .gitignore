@@ -5,3 +5,7 @@ xcuserdata/
 DerivedData/
 .swiftpm/
 .netrc
+
+# Demo app: `project.yml` is the source of truth, the project is generated.
+Demo/*.xcodeproj/
+Demo/build/

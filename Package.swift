@@ -13,5 +13,9 @@ let package = Package(
             name: "ApiLogKit",
             linkerSettings: [.linkedFramework("AudioToolbox")]
         ),
+        .testTarget(
+            name: "ApiLogKitTests",
+            dependencies: ["ApiLogKit"]
+        ),
     ]
 )

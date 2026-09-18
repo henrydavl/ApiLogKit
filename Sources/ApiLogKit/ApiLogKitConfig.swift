@@ -22,6 +22,11 @@ public enum ApiLogKitConfig {
     ///     ApiLogKitConfig.thirdPartyTracker.ignoredHosts = ["api.myapp.com"]
     public static var thirdPartyTracker = ThirdPartyTrackerOptions()
 
+    /// Retention budget for logs written to disk.
+    ///
+    /// Set this before calling `ApiLogger.shared.enablePersistence(_:)`.
+    public static var persistence = PersistenceOptions()
+
     /// Optional hook for a host-provided "Developer Options" screen.
     ///
     /// When set, the log list's menu shows a "Developer Options" entry that

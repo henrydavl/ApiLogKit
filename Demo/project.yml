@@ -1,0 +1,45 @@
+#
+#  ApiLogKitDemo
+#
+#  Regenerate the Xcode project with:
+#      cd Demo && xcodegen generate
+#
+#  The project file itself is generated, not checked in — `project.yml` is the
+#  source of truth.
+#
+
+name: ApiLogKitDemo
+
+options:
+  bundleIdPrefix: com.apilogkit
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+
+packages:
+  ApiLogKit:
+    # The library under development, consumed exactly as a host app would.
+    path: ..
+
+targets:
+  ApiLogKitDemo:
+    type: application
+    platform: iOS
+    sources:
+      - path: ApiLogKitDemo
+    dependencies:
+      - package: ApiLogKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.apilogkit.demo
+        PRODUCT_NAME: ApiLogKitDemo
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_CFBundleDisplayName: ApiLogKit Demo
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGN_IDENTITY: ""
