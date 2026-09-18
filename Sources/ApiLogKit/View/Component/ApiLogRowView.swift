@@ -27,25 +27,37 @@ struct ApiLogRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if logType.isHTTP {
-                HStack(spacing: 8) {
-                    if isPending {
-                        pendingBadge
-                    } else {
-                        Text(log.responseCode)
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(statusColor)
-                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            // EventTracker rows have no status or timing, but a restored one
+            // still needs its marker — so the badge row also appears for those.
+            if logType.isHTTP || log.isRestored {
+                HStack(spacing: 6) {
+                    if logType.isHTTP {
+                        if isPending {
+                            pendingBadge
+                        } else {
+                            Text(log.responseCode)
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(statusColor)
+                                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        }
                     }
+
+                    if log.isRestored {
+                        restoredBadge
+                    }
+
                     Spacer()
-                    // An in-flight request has no duration yet — showing "0.00 s"
-                    // would read as an impossibly fast response.
-                    Text(isPending ? "—" : responseTimeText)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.secondary)
+
+                    if logType.isHTTP {
+                        // An in-flight request has no duration yet — showing
+                        // "0.00 s" would read as an impossibly fast response.
+                        Text(isPending ? "—" : responseTimeText)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
 
@@ -75,6 +87,19 @@ struct ApiLogRowView: View {
         // Dim the whole row while in flight, so completed entries are what the
         // eye lands on when scanning.
         .opacity(isPending ? 0.55 : 1)
+    }
+
+    /// Marks an entry that came from disk rather than this session. Sized to sit
+    /// flush beside the status badge.
+    private var restoredBadge: some View {
+        Image(systemName: "archivebox")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundColor(.secondary)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(Color(.tertiarySystemFill))
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .accessibilityLabel("From a previous session")
     }
 
     /// Stands in for the status badge until a real code arrives.

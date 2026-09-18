@@ -167,6 +167,10 @@ ApiLogger.shared.clearPersistedLogs()
 Writes are debounced and flushed when the app backgrounds. Entries still in flight at
 exit aren't persisted, since a restored pending entry could never complete.
 
+Restored entries carry an 📦 marker beside their status badge, so a log from the
+previous session is distinguishable at a glance from one recorded just now. The flag
+is also readable in code via `ApiLog.isRestored`.
+
 ### 6. Optional configuration
 
 ```swift

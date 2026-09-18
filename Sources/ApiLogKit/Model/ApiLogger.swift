@@ -256,12 +256,22 @@ public final class ApiLogger {
     /// Seeds the buckets with entries loaded from disk.
     ///
     /// Restored logs are older than anything recorded in this session, so they go
-    /// in front — the list sorts by insertion order.
+    /// in front — the list sorts by insertion order. They're flagged here rather
+    /// than at the decoding layer, so every restore path is marked by
+    /// construction.
     func restore(api: [ApiLog], eventTracker: [ApiLog], thirdParty: [ApiLog]) {
+        let marked: ([ApiLog]) -> [ApiLog] = { logs in
+            logs.map { log in
+                var log = log
+                log.markRestored()
+                return log
+            }
+        }
+
         queue.async {
-            self.logsSubject.value = api + self.logsSubject.value
-            self.eventTrackerSubject.value = eventTracker + self.eventTrackerSubject.value
-            self.thirdPartySubject.value = thirdParty + self.thirdPartySubject.value
+            self.logsSubject.value = marked(api) + self.logsSubject.value
+            self.eventTrackerSubject.value = marked(eventTracker) + self.eventTrackerSubject.value
+            self.thirdPartySubject.value = marked(thirdParty) + self.thirdPartySubject.value
         }
     }
 
