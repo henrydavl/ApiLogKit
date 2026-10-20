@@ -12,6 +12,7 @@
 
 import ApiLogKit
 import Foundation
+import UIKit
 
 enum DemoTraffic {
 
@@ -81,8 +82,40 @@ enum DemoTraffic {
             status: "204",
             delay: 0.6,
             responseBody: ""
-        )
+        ),
+        faceVerification
     ]
+
+    /// Body handed to the logger as a JSON *string* under one key, carrying a
+    /// base64 photo — exercises the embedded-JSON unfolding and the long-string
+    /// viewer.
+    static let faceVerification: Scenario = {
+        let photo = UIGraphicsImageRenderer(size: CGSize(width: 480, height: 640)).image { context in
+            UIColor.systemTeal.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 480, height: 640))
+            UIColor.white.setFill()
+            context.cgContext.fillEllipse(in: CGRect(x: 120, y: 160, width: 240, height: 300))
+        }
+        let image = photo.jpegData(compressionQuality: 0.9)?.base64EncodedString() ?? ""
+        let payload: [String: Any] = [
+            "id": "8e597e72-8cd4-4bba-bfc2-ffd0c3cbcb39",
+            "latitude": -6.2142,
+            "longitude": 106.8370,
+            "image": image
+        ]
+        let json = (try? JSONSerialization.data(withJSONObject: payload))
+            .map { String(decoding: $0, as: UTF8.self) } ?? "{}"
+
+        return Scenario(
+            label: "POST face verification · 200",
+            method: "POST",
+            url: "https://api.onboarding.example.com/v1/face/verification",
+            status: "200",
+            delay: 0.8,
+            requestBody: ["payload": json],
+            responseBody: #"{"code":"00","description":"Success","data":{"is_need_otp":false,"score":0.97}}"#
+        )
+    }()
 
     /// Long enough to open the inspector and watch it sitting there in flight.
     static let slow = Scenario(

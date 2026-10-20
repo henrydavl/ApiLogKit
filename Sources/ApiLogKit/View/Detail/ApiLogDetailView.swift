@@ -12,6 +12,9 @@ struct ApiLogDetailView: View {
     @StateObject private var viewModel: ApiLogDetailViewModel
     @State private var shareItem: ShareItem?
 
+    // Long string value (e.g. base64) opened from the JSON tree.
+    @State private var longString: LongStringItem?
+
     // Copy confirmation toast.
     @State private var toastMessage: String?
     @State private var toastWorkItem: DispatchWorkItem?
@@ -60,6 +63,9 @@ struct ApiLogDetailView: View {
         }
         .sheet(item: $shareItem) { item in
             ShareSheet(text: item.text)
+        }
+        .sheet(item: $longString) { item in
+            LongStringViewer(item: item)
         }
         .overlay(alignment: .bottom) {
             if let toastMessage {
@@ -129,7 +135,7 @@ struct ApiLogDetailView: View {
                 .listRowInsets(EdgeInsets())
                 .listRowSeparator(.hidden)
 
-            JSONTreeView(model: tree, onCopy: { copy($0) })
+            JSONTreeView(model: tree, onCopy: { copy($0) }, onOpenString: { longString = $0 })
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 10)
