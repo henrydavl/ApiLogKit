@@ -13,7 +13,9 @@ import SwiftUI
 final class JSONTreeModel: ObservableObject {
     @Published private var expandedPaths: Set<String>
 
-    /// Strings longer than this are truncated in the tree (e.g. base64).
+    /// Strings longer than this are truncated in the tree (e.g. base64) and
+    /// open in `LongStringViewer` instead — laying out a multi-megabyte `Text`
+    /// inline stalls the list.
     let stringLimit = 300
 
     let root: JSONNode
@@ -52,6 +54,9 @@ final class JSONTreeModel: ObservableObject {
             case .array(let items):
                 if depth < 2 && items.count <= 100 { set.insert(path) }
                 for (index, item) in items.enumerated() { walk(item, path: path + "[\(index)]", depth: depth + 1) }
+            case .embedded(_, let parsed):
+                // Unfolds in place, sharing its parent's path and depth.
+                walk(parsed, path: path, depth: depth)
             default:
                 break
             }
@@ -70,6 +75,8 @@ final class JSONTreeModel: ObservableObject {
             case .array(let items):
                 set.insert(path)
                 for (index, item) in items.enumerated() { walk(item, path: path + "[\(index)]") }
+            case .embedded(_, let parsed):
+                walk(parsed, path: path)
             default:
                 break
             }
@@ -107,6 +114,7 @@ struct JSONTreeControls: View {
 struct JSONTreeView: View {
     @ObservedObject var model: JSONTreeModel
     let onCopy: (String) -> Void
+    let onOpenString: (LongStringItem) -> Void
 
     var body: some View {
         JSONNodeView(
@@ -115,7 +123,8 @@ struct JSONTreeView: View {
             index: nil,
             node: model.root,
             path: JSONTreeModel.rootPath,
-            onCopy: onCopy
+            onCopy: onCopy,
+            onOpenString: onOpenString
         )
     }
 }
@@ -129,6 +138,9 @@ struct JSONNodeView: View {
     let node: JSONNode
     let path: String
     let onCopy: (String) -> Void
+    let onOpenString: (LongStringItem) -> Void
+    /// Original text when `node` was unfolded from a JSON string value.
+    var embeddedRaw: String? = nil
 
     private let font = Font.system(size: 13, design: .monospaced)
     private let indent: CGFloat = 16
@@ -148,7 +160,8 @@ struct JSONNodeView: View {
                         index: nil,
                         node: pair.value,
                         path: path + "." + pair.key,
-                        onCopy: onCopy
+                        onCopy: onCopy,
+                        onOpenString: onOpenString
                     )
                 }
             }
@@ -161,10 +174,22 @@ struct JSONNodeView: View {
                         index: itemIndex,
                         node: item,
                         path: path + "[\(itemIndex)]",
-                        onCopy: onCopy
+                        onCopy: onCopy,
+                        onOpenString: onOpenString
                     )
                 }
             }
+        case .embedded(let raw, let parsed):
+            JSONNodeView(
+                model: model,
+                key: key,
+                index: index,
+                node: parsed,
+                path: path,
+                onCopy: onCopy,
+                onOpenString: onOpenString,
+                embeddedRaw: raw
+            )
         default:
             leafRow
         }
@@ -211,20 +236,35 @@ struct JSONNodeView: View {
     }
 
     private func headerText(open: String, close: String, count: Int, expanded: Bool) -> Text {
+        // Flags values that were a JSON string in the actual payload, so the
+        // unfolded view isn't mistaken for the wire format.
+        let tag = embeddedRaw == nil
+            ? Text("")
+            : Text("  JSON string").foregroundColor(Color(.tertiaryLabel))
         if expanded {
-            return prefixText + Text(open).foregroundColor(.secondary)
+            return prefixText + Text(open).foregroundColor(.secondary) + tag
         }
         return prefixText
             + Text("\(open) … \(close)").foregroundColor(.secondary)
             + Text("  \(count)").foregroundColor(Color(.tertiaryLabel))
+            + tag
     }
 
     // MARK: Leaf
 
-    /// True when this leaf is a string longer than the display limit.
-    private var isTruncatableString: Bool {
-        if case .string(let value) = node { return value.count > model.stringLimit }
-        return false
+    /// The full value when this leaf is a string longer than the display limit.
+    private var longString: String? {
+        guard case .string(let value) = node else { return nil }
+        // `dropFirst` walks at most `stringLimit` characters, unlike `count`,
+        // which would walk the whole (possibly multi-megabyte) string.
+        return value.dropFirst(model.stringLimit).isEmpty ? nil : value
+    }
+
+    /// Readable location for the viewer's title, e.g. `data.image`.
+    private var displayPath: String {
+        if path == JSONTreeModel.rootPath { return "Value" }
+        if path.hasPrefix(JSONTreeModel.rootPath + ".") { return String(path.dropFirst(2)) }
+        return String(path.dropFirst())
     }
 
     private var leafRow: some View {
@@ -236,14 +276,23 @@ struct JSONNodeView: View {
             .padding(.leading, textInset)
             .contentShape(Rectangle())
             .onTapGesture {
-                // Long strings expand/collapse on tap; everything else copies.
-                if isTruncatableString {
-                    model.toggle(path)
+                // Long strings open the full-value viewer; everything else copies.
+                if let longString {
+                    onOpenString(LongStringItem(title: displayPath, value: longString))
                 } else {
                     onCopy(node.rawValue)
                 }
             }
-            .contextMenu { copyButton }
+            .contextMenu {
+                if let longString {
+                    Button {
+                        onOpenString(LongStringItem(title: displayPath, value: longString))
+                    } label: {
+                        Label("View full value", systemImage: "arrow.up.left.and.arrow.down.right")
+                    }
+                }
+                copyButton
+            }
     }
 
     // MARK: Pieces
@@ -262,10 +311,11 @@ struct JSONNodeView: View {
     private var valueText: Text {
         switch node {
         case .string(let value):
-            if value.count > model.stringLimit, !model.isExpanded(path) {
+            if longString != nil {
                 let head = String(value.prefix(model.stringLimit))
+                let size = ByteCountFormatter.string(fromByteCount: Int64(value.utf8.count), countStyle: .file)
                 return Text("\"\(head)…\"").foregroundColor(.green)
-                    + Text("  tap to expand · \(value.count) chars").foregroundColor(Color(.tertiaryLabel))
+                    + Text("  tap to view · \(size)").foregroundColor(Color(.tertiaryLabel))
             }
             return Text("\"\(value)\"").foregroundColor(.green)
         case .number(let value):
@@ -278,14 +328,25 @@ struct JSONNodeView: View {
             return Text("{}").foregroundColor(.secondary)
         case .array:
             return Text("[]").foregroundColor(.secondary)
+        case .embedded:
+            // Unwrapped in `body` before reaching a leaf.
+            return Text("")
         }
     }
 
+    @ViewBuilder
     private var copyButton: some View {
         Button {
             onCopy(node.rawValue)
         } label: {
             Label(node.isContainer ? "Copy subtree" : "Copy value", systemImage: "doc.on.doc")
+        }
+        if let embeddedRaw {
+            Button {
+                onCopy(embeddedRaw)
+            } label: {
+                Label("Copy original string", systemImage: "doc.on.doc")
+            }
         }
     }
 }

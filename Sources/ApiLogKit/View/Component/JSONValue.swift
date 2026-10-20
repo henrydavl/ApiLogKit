@@ -15,11 +15,15 @@ indirect enum JSONNode {
     case number(String)
     case bool(Bool)
     case null
+    /// A string value that itself holds a JSON object/array — e.g. a request
+    /// body passed as `["payload": jsonString]`. Display-only: the viewer
+    /// unfolds `parsed`, while copy and export keep `raw` exactly as logged.
+    case embedded(raw: String, parsed: JSONNode)
 
     /// A container has collapsible children.
     var isContainer: Bool {
         switch self {
-        case .object, .array: return true
+        case .object, .array, .embedded: return true
         default: return false
         }
     }
@@ -29,6 +33,7 @@ indirect enum JSONNode {
         switch self {
         case .object(let pairs): return pairs.count
         case .array(let items): return items.count
+        case .embedded(_, let parsed): return parsed.childCount
         default: return 0
         }
     }
@@ -70,12 +75,25 @@ extension JSONNode {
             }
             return .number(number.stringValue)
         case let string as String:
+            if let parsed = parseEmbedded(string) {
+                return .embedded(raw: string, parsed: parsed)
+            }
             return .string(string)
         case is NSNull:
             return .null
         default:
             return .string(String(describing: any))
         }
+    }
+
+    /// Parses a string value that holds a JSON object/array. The leading-brace
+    /// check keeps this cheap for the common case (plain text, base64, ids).
+    private static func parseEmbedded(_ string: String) -> JSONNode? {
+        guard let first = string.first(where: { !$0.isWhitespace }),
+              first == "{" || first == "["
+        else { return nil }
+        guard let node = parse(string), node.childCount > 0 else { return nil }
+        return node
     }
 }
 
@@ -108,6 +126,8 @@ extension JSONNode {
             return value ? "true" : "false"
         case .null:
             return "null"
+        case .embedded(let raw, _):
+            return Self.encode(string: raw)
         }
     }
 
@@ -118,6 +138,7 @@ extension JSONNode {
         case .number(let value): return value
         case .bool(let value):   return value ? "true" : "false"
         case .null:              return "null"
+        case .embedded(let raw, _): return raw
         case .object, .array:    return prettyPrinted()
         }
     }

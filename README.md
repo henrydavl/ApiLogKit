@@ -13,7 +13,11 @@ logs (plus analytics events such as AppsFlyer) and presents them in a debug UI w
 - 💾 Optional persistence — logs survive relaunch, so a crash doesn't take the
   evidence with it
 - 🌳 Interactive JSON viewer — collapsible objects/arrays with child counts,
-  type-colored values, tap-to-expand long strings (base64-safe), expand/collapse all
+  type-colored values, expand/collapse all. JSON passed as a string value (e.g.
+  `["payload": jsonString]`) unfolds into the tree too — display only, copy and
+  export keep the original string
+- 🔍 Long values (base64, tokens) open in a full-screen viewer instead of
+  expanding inline, with an image preview for base64-encoded images
 - 📝 Tree ⇄ pretty-JSON text toggle per body section
 - 📤 Export as raw log or ready-to-run cURL command
 - 📎 Copy any value, subtree, or section with toast confirmation
