@@ -139,8 +139,6 @@ struct JSONNodeView: View {
     let path: String
     let onCopy: (String) -> Void
     let onOpenString: (LongStringItem) -> Void
-    /// Original text when `node` was unfolded from a JSON string value.
-    var embeddedRaw: String? = nil
 
     private let font = Font.system(size: 13, design: .monospaced)
     private let indent: CGFloat = 16
@@ -149,8 +147,26 @@ struct JSONNodeView: View {
     /// (chevron width + HStack spacing).
     private let textInset: CGFloat = 16
 
+    /// What gets drawn: a JSON string value is drawn as the container it holds.
+    ///
+    /// Unwrapped here rather than by returning a nested `JSONNodeView` from
+    /// `body`. That would make the body type contain `JSONNodeView` directly,
+    /// outside a `ForEach`, and SwiftUI walks a body's type statically to count
+    /// its views (`_viewListCount`) — on iOS 17 that walk never terminated and
+    /// overflowed the main-thread stack as soon as a tree was shown.
+    private var content: JSONNode {
+        if case .embedded(_, let parsed) = node { return parsed }
+        return node
+    }
+
+    /// Original text when `node` was unfolded from a JSON string value.
+    private var embeddedRaw: String? {
+        if case .embedded(let raw, _) = node { return raw }
+        return nil
+    }
+
     var body: some View {
-        switch node {
+        switch content {
         case .object(let pairs) where !pairs.isEmpty:
             container(open: "{", close: "}", count: pairs.count) {
                 ForEach(Array(pairs.enumerated()), id: \.offset) { _, pair in
@@ -179,17 +195,6 @@ struct JSONNodeView: View {
                     )
                 }
             }
-        case .embedded(let raw, let parsed):
-            JSONNodeView(
-                model: model,
-                key: key,
-                index: index,
-                node: parsed,
-                path: path,
-                onCopy: onCopy,
-                onOpenString: onOpenString,
-                embeddedRaw: raw
-            )
         default:
             leafRow
         }
@@ -254,7 +259,7 @@ struct JSONNodeView: View {
 
     /// The full value when this leaf is a string longer than the display limit.
     private var longString: String? {
-        guard case .string(let value) = node else { return nil }
+        guard case .string(let value) = content else { return nil }
         // `dropFirst` walks at most `stringLimit` characters, unlike `count`,
         // which would walk the whole (possibly multi-megabyte) string.
         return value.dropFirst(model.stringLimit).isEmpty ? nil : value
@@ -280,7 +285,7 @@ struct JSONNodeView: View {
                 if let longString {
                     onOpenString(LongStringItem(title: displayPath, value: longString))
                 } else {
-                    onCopy(node.rawValue)
+                    onCopy(content.rawValue)
                 }
             }
             .contextMenu {
@@ -309,7 +314,7 @@ struct JSONNodeView: View {
     }
 
     private var valueText: Text {
-        switch node {
+        switch content {
         case .string(let value):
             if longString != nil {
                 let head = String(value.prefix(model.stringLimit))
@@ -329,7 +334,7 @@ struct JSONNodeView: View {
         case .array:
             return Text("[]").foregroundColor(.secondary)
         case .embedded:
-            // Unwrapped in `body` before reaching a leaf.
+            // `content` never is one — `parse` only yields objects and arrays.
             return Text("")
         }
     }
@@ -337,9 +342,9 @@ struct JSONNodeView: View {
     @ViewBuilder
     private var copyButton: some View {
         Button {
-            onCopy(node.rawValue)
+            onCopy(content.rawValue)
         } label: {
-            Label(node.isContainer ? "Copy subtree" : "Copy value", systemImage: "doc.on.doc")
+            Label(content.isContainer ? "Copy subtree" : "Copy value", systemImage: "doc.on.doc")
         }
         if let embeddedRaw {
             Button {

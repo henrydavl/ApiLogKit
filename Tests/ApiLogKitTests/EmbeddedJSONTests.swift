@@ -69,6 +69,34 @@ final class EmbeddedJSONTests: XCTestCase {
         XCTAssertEqual(reparsed?["payload"], payload)
     }
 
+    /// `JSONNodeView` may only contain itself inside a `ForEach`. A direct
+    /// self-reference in its body type sends SwiftUI's static view count
+    /// (`_viewListCount`) into endless recursion, which crashed iOS 17 with a
+    /// main-thread stack overflow the moment a tree appeared. The iOS 26
+    /// simulator never runs that walk, so rendering can't catch it — the type
+    /// itself is checked instead.
+    func testNodeViewOnlyNestsItselfThroughForEach() {
+        var type = String(reflecting: JSONNodeView.Body.self)
+        XCTAssertTrue(type.contains("ForEach<"), "expected children to come from a ForEach")
+
+        // Drop every `ForEach<…>` (with its balanced generic arguments).
+        while let start = type.range(of: "ForEach<") {
+            var depth = 0
+            var end = start.upperBound
+            for index in type[start.lowerBound...].indices {
+                if type[index] == "<" { depth += 1 }
+                if type[index] == ">" {
+                    depth -= 1
+                    if depth == 0 { end = type.index(after: index); break }
+                }
+            }
+            type.removeSubrange(start.lowerBound..<end)
+        }
+
+        XCTAssertFalse(type.contains("JSONNodeView"),
+                       "JSONNodeView's body refers to JSONNodeView outside a ForEach")
+    }
+
     func testEmbeddedContainersAreExpandedByDefault() throws {
         let node = try XCTUnwrap(JSONNode.from(dictionary: ["payload": payload]))
         let model = JSONTreeModel(root: node)
