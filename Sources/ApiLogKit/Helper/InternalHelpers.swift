@@ -11,10 +11,13 @@ import Foundation
 extension String {
 
     /// Pretty-prints the string if it contains JSON; otherwise returns self.
+    ///
+    /// Slashes stay unescaped: `JSONSerialization` would otherwise write `/` as
+    /// `\/`, which breaks base64 values for anyone copying them out.
     func jsonize() -> String {
         if let jsonData = data(using: .utf8),
            let json = try? JSONSerialization.jsonObject(with: jsonData, options: .mutableContainers),
-           let prettyPrintedData = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted),
+           let prettyPrintedData = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .withoutEscapingSlashes]),
            let prettyPrintedString = String(data: prettyPrintedData, encoding: .utf8) {
             return prettyPrintedString
         }
@@ -30,10 +33,11 @@ extension String {
 
 extension Data {
 
-    /// Pretty-prints the data if it contains JSON; otherwise decodes as UTF-8.
+    /// Pretty-prints the data if it contains JSON (slashes unescaped, as above);
+    /// otherwise decodes as UTF-8.
     func jsonize() -> String {
         if let json = try? JSONSerialization.jsonObject(with: self, options: .mutableContainers),
-           let jsonData = try? JSONSerialization.data(withJSONObject: json, options: .prettyPrinted) {
+           let jsonData = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .withoutEscapingSlashes]) {
             return String(decoding: jsonData, as: UTF8.self)
         }
         return String(data: self, encoding: .utf8) ?? ""
