@@ -14,6 +14,18 @@
 import Foundation
 
 struct PersistedApiLog: Codable {
+    /// The log's own identity, carried across the round trip.
+    ///
+    /// Needed for two reasons beyond display: the journal records an entry when
+    /// the request leaves and again when it completes, and the reader keeps the
+    /// last line per id; and the archive and the journal overlap after a save
+    /// that didn't get to truncate, which the same id makes harmless.
+    var id: UUID
+
+    /// Whether the exchange had come back. Pending entries are written now,
+    /// where they used to be dropped at save time.
+    var state: ApiLogState
+
     var responseCode: String
     var method: String
     var url: String
@@ -30,6 +42,8 @@ struct PersistedApiLog: Codable {
 
     /// Bodies are truncated to `maxBodyBytes`; headers are small and kept whole.
     init(_ log: ApiLog, maxBodyBytes: Int) {
+        self.id = log.id
+        self.state = log.state
         self.responseCode = log.responseCode
         self.method = log.method
         self.url = log.url
@@ -43,11 +57,16 @@ struct PersistedApiLog: Codable {
         self.requestBodyText = log.requestBodyText.map { Self.truncate($0, toBytes: maxBodyBytes) }
     }
 
-    /// Rebuilds a log entry. Restored entries get a fresh `id` — they're new to
-    /// this session — and are always `.finished`, since anything still in flight
-    /// when the app died is dropped before writing.
+    /// Rebuilds a log entry, keeping the identity and lifecycle it was stored
+    /// with.
+    ///
+    /// The identity is preserved rather than regenerated so a journal line and
+    /// its later completion collapse to one entry. The state is preserved so a
+    /// request that was in flight when the app died comes back marked pending
+    /// — it is shown as *No response* rather than as a spinner that can never
+    /// resolve.
     func toApiLog() -> ApiLog {
-        ApiLog(
+        var log = ApiLog(
             responseCode: responseCode,
             method: method,
             url: url,
@@ -60,6 +79,9 @@ struct PersistedApiLog: Codable {
             requestBody: Self.decode(requestBody),
             requestBodyText: requestBodyText
         )
+        log.state = state
+        log.restoreIdentity(id: id, date: date)
+        return log
     }
 
     // MARK: - Dictionary coding
@@ -107,7 +129,11 @@ struct PersistedApiLog: Codable {
 /// Everything written in one file, versioned so a future format change can be
 /// detected and discarded rather than mis-parsed.
 struct PersistedLogArchive: Codable {
-    static let currentVersion = 1
+    /// Bumped to 2 when entries gained an id and a state. A version 1 archive
+    /// lacks both and is discarded on read rather than migrated — debug logs
+    /// are disposable, and the alternative is optional fields that would have
+    /// to be handled forever.
+    static let currentVersion = 2
 
     var version: Int = PersistedLogArchive.currentVersion
     var api: [PersistedApiLog] = []

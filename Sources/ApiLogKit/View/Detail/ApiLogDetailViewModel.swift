@@ -40,12 +40,24 @@ final class ApiLogDetailViewModel: ObservableObject {
 
     /// True while the request is still in flight — the response sections are
     /// empty because there's nothing to show yet, not because anything is wrong.
-    var isPending: Bool { log.state == .pending }
+    ///
+    /// False for a restored entry: that request's process is gone, so it is no
+    /// longer in flight and a spinner would never stop. See `isUnfinished`.
+    var isPending: Bool { log.state == .pending && !log.isRestored }
+
+    /// True for an entry that was still waiting on a response when its session
+    /// ended — the shape a request takes when the app died mid-call, and the
+    /// most likely thing to have caused that.
+    var isUnfinished: Bool { log.state == .pending && log.isRestored }
 
     init(log: ApiLog, logType: LogEventType) {
         self.log = log
         self.logType = logType
-        self.sections = LogSection.allCases.filter { $0.isAvailable(for: logType) }
+        // The crash section is dropped for the (overwhelming majority of)
+        // entries that carry no crash.
+        self.sections = LogSection.allCases.filter {
+            $0.isAvailable(for: logType) && ($0 != .crash || log.crash != nil)
+        }
         rebuild()
         observeCompletion()
     }
@@ -101,6 +113,7 @@ final class ApiLogDetailViewModel: ObservableObject {
         let responseBody = Self.chunked([Log(key: "", value: responseBodyText)])
 
         rowsBySection = [
+            .crash: Self.crashRows(for: log).map { ApiLogDetailRow(log: $0) },
             .requestURL: [ApiLogDetailRow(log: Log(key: "", value: log.url))],
             .requestHeader: requestHeader.map { ApiLogDetailRow(log: $0) },
             .requestBody: requestBody.map { ApiLogDetailRow(log: $0) },
@@ -142,9 +155,16 @@ final class ApiLogDetailViewModel: ObservableObject {
         requestJSON != nil || responseJSON != nil
     }
 
+    /// Whether a section's rows are rendered monospaced. A call stack is as
+    /// column-aligned as pretty-printed JSON, so it gets the same treatment.
+    func isMonospaced(for section: LogSection) -> Bool {
+        section == .crash || jsonNode(for: section) != nil
+    }
+
     /// Full value copied when the section's "Copy" button is tapped.
     func copyValue(for section: LogSection) -> String {
         switch section {
+        case .crash:          return log.crash.map { ApiLogExporter.crashReport(for: $0) } ?? ""
         case .requestURL:     return log.url
         case .requestHeader:  return "\(log.requestHeader)"
         case .requestBody:    return requestJSON?.prettyPrinted() ?? log.requestBodyText ?? "\(log.requestBody)"
@@ -159,6 +179,28 @@ final class ApiLogDetailViewModel: ObservableObject {
     func exportCurl() -> String { ApiLogExporter.curl(for: log) }
 
     // MARK: - Helpers
+
+    /// Crash section rows: the summary as labelled pairs, then the stack.
+    ///
+    /// Only the stack goes through `chunked` — it is the one unbounded value
+    /// here, and the summary lines must stay intact so their labels still read
+    /// as labels.
+    private static func crashRows(for log: ApiLog) -> [Log] {
+        guard let crash = log.crash else { return [] }
+        var rows = [Log(key: "", value: crash.headline)]
+        if let explanation = crash.explanation {
+            rows.append(Log(key: "Likely cause", value: explanation))
+        }
+        if case .signal(_, let number) = crash.cause {
+            rows.append(Log(key: "Signal", value: "\(crash.causeLabel) (\(number))"))
+        }
+        rows.append(Log(key: "Time", value: crash.date.apiLogFormatted()))
+        let stack = crash.callStack.joined(separator: "\n")
+        if !stack.isEmpty {
+            rows += chunked([Log(key: "Call Stack", value: stack)])
+        }
+        return rows
+    }
 
     private static func logs(from dictionary: [String: Any], isJsonize: Bool = false) -> [Log] {
         dictionary.map { key, value in

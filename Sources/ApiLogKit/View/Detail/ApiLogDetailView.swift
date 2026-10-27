@@ -39,6 +39,10 @@ struct ApiLogDetailView: View {
                 .safeAreaInset(edge: .top, spacing: 0) {
                     if viewModel.isPending {
                         pendingBanner
+                    } else if viewModel.isUnfinished {
+                        // Same empty response sections, a different and final
+                        // reason: this request never got an answer.
+                        unfinishedBanner
                     }
                 }
                 .overlay(alignment: .bottomTrailing) {
@@ -96,6 +100,27 @@ struct ApiLogDetailView: View {
         }
     }
 
+    /// The restored counterpart of `pendingBanner`: the response sections are
+    /// empty and always will be, because the app went down while this call was
+    /// still out.
+    private var unfinishedBanner: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "hourglass")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text("No response — this request was still in flight when the session ended")
+                    .font(.caption)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+            .background(Color(.tertiarySystemFill))
+            Divider()
+        }
+    }
+
     // MARK: - List
 
     private var list: some View {
@@ -142,7 +167,7 @@ struct ApiLogDetailView: View {
                 .listRowInsets(EdgeInsets())
                 .listRowSeparator(.hidden)
         } else {
-            let monospaced = viewModel.jsonNode(for: section) != nil
+            let monospaced = viewModel.isMonospaced(for: section)
             ForEach(viewModel.rows(for: section)) { row in
                 rowView(row, monospaced: monospaced)
                     .frame(maxWidth: .infinity, alignment: .leading)

@@ -32,6 +32,13 @@ final class ApiLogListViewModel: ObservableObject {
     /// Status / method / host facets applied on top of the search query.
     @Published private(set) var filter = ApiLogFilter()
 
+    /// The crash that ended the previous run, once the restore has read it
+    /// back — nil when the last run ended cleanly or crash capture is off.
+    @Published private(set) var lastCrash: CrashReport?
+
+    /// Set when the user dismisses the crash banner, so it stays dismissed.
+    @Published private var isCrashBannerDismissed = false
+
     /// Live mirrors of the logger's data, kept up to date via Combine so logs
     /// added while this screen is on-screen (e.g. from Developer Options) show
     /// up without closing and reopening the inspector.
@@ -82,6 +89,14 @@ final class ApiLogListViewModel: ObservableObject {
                 self?.thirdPartyLogs = logs
                 self?.reloadIfLive()
             }
+            .store(in: &cancellables)
+
+        // Subscribed rather than read once: the restore runs on a background
+        // queue, so the crash usually arrives a moment after the inspector has
+        // already been presented.
+        ApiLogger.shared.lastCrashPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] crash in self?.lastCrash = crash }
             .store(in: &cancellables)
 
         // Debounced search — replaces the view's `.onChange(of:)` reload.
@@ -191,6 +206,28 @@ final class ApiLogListViewModel: ObservableObject {
     func toggleHost(_ host: String) {
         filter.toggle(host.lowercased(), in: \.hosts)
         reload()
+    }
+
+    // MARK: - Crash
+
+    /// Whether to offer the crash banner: only on the API tab, since suspects
+    /// are only ever API entries, and only until dismissed.
+    var showsCrashBanner: Bool {
+        lastCrash != nil && !isCrashBannerDismissed && logType == .api
+    }
+
+    /// The entry the crash was pinned to, for the banner's jump-to action.
+    ///
+    /// Read from the unfiltered bucket on purpose — the banner has to work when
+    /// a search or facet has filtered the suspect out of view, which is exactly
+    /// when the jump earns its keep. Nil when the row was trimmed before the
+    /// restore; the banner then appears without the action.
+    var crashedLog: ApiLog? {
+        apiLogs.last { $0.crash != nil }
+    }
+
+    func dismissCrashBanner() {
+        isCrashBannerDismissed = true
     }
 
     func clearFilters() {

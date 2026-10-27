@@ -13,6 +13,11 @@ public struct Log {
 }
 
 public enum LogSection: Int, CaseIterable {
+    /// The crash this entry is blamed for. Listed **first**, and only on an
+    /// entry that carries one: when you open that row you are not browsing
+    /// traffic, you are looking for what killed the app, so the stack trace
+    /// belongs above the payload rather than under it.
+    case crash = -1
     case requestURL = 0
     case requestHeader
     case requestBody
@@ -21,6 +26,8 @@ public enum LogSection: Int, CaseIterable {
 
     public func title(for logType: LogEventType) -> String {
         switch self {
+        case .crash:
+            return "Crash"
         case .requestURL:
             return logType == .eventTracker ? "Event Name" : "Request URL"
         case .requestHeader:
@@ -40,6 +47,10 @@ public enum LogSection: Int, CaseIterable {
             return true
         case .requestHeader, .responseHeader:
             return logType.isHTTP
+        // Availability is per log type; whether the entry actually carries a
+        // crash is decided by the detail view model, which can see the entry.
+        case .crash:
+            return true
         }
     }
 }

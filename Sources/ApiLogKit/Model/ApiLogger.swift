@@ -24,6 +24,7 @@ public final class ApiLogger {
     private let logsSubject = CurrentValueSubject<[ApiLog], Never>([])
     private let eventTrackerSubject = CurrentValueSubject<[ApiLog], Never>([])
     private let thirdPartySubject = CurrentValueSubject<[ApiLog], Never>([])
+    private let lastCrashSubject = CurrentValueSubject<CrashReport?, Never>(nil)
     private var isEnableEventTrackerLog: Bool = false
     private var isEnableThirdPartyTracker: Bool = false
     private let queue = DispatchQueue(label: "apilogkit.logger.queue")
@@ -43,6 +44,21 @@ public final class ApiLogger {
     /// Emits the full 3rd-party traffic log array whenever it changes.
     public var thirdPartyLogsPublisher: AnyPublisher<[ApiLog], Never> {
         thirdPartySubject.eraseToAnyPublisher()
+    }
+
+    /// The crash that ended the previous run, or nil when it ended cleanly (or
+    /// crash capture is off).
+    ///
+    /// Published separately from the logs so the inspector can report the crash
+    /// even when the entry it blamed has since been trimmed away. A crash in
+    /// *this* run never appears here — the process does not survive it.
+    public var lastCrashPublisher: AnyPublisher<CrashReport?, Never> {
+        lastCrashSubject.eraseToAnyPublisher()
+    }
+
+    /// The previous run's crash, if there was one.
+    public var lastCrash: CrashReport? {
+        queue.sync { self.lastCrashSubject.value }
     }
 
     /// Master switch — when false, `addLog`/`addAppsFlyerLog` are no-ops.
@@ -194,6 +210,10 @@ public final class ApiLogger {
                     subject.value.removeFirst(overflow)
                 }
             }
+            // Straight to the journal, including while still pending: a request
+            // that never comes back leaves no other trace, and waiting for the
+            // debounced archive write is what used to lose it.
+            LogPersistence.shared.record(log, bucket: bucket)
         }
     }
 
@@ -203,6 +223,9 @@ public final class ApiLogger {
             let subject = self.subject(for: bucket)
             guard let index = subject.value.firstIndex(where: { $0.id == id }) else { return }
             body(&subject.value[index])
+            // A second journal line for the same id; the reader keeps the last
+            // one, so the pending line is superseded rather than duplicated.
+            LogPersistence.shared.record(subject.value[index], bucket: bucket)
         }
     }
 
@@ -223,6 +246,9 @@ public final class ApiLogger {
             self.logsSubject.value = []
             self.eventTrackerSubject.value = []
             self.thirdPartySubject.value = []
+            // The crash banner would otherwise outlive the entries it pointed
+            // at, and "clear" plainly means the inspector comes back empty.
+            self.lastCrashSubject.value = nil
         }
     }
 
@@ -237,9 +263,15 @@ public final class ApiLogger {
     /// the retention budget.
     ///
     /// Call at launch. Anything already on disk is loaded immediately, ahead of
-    /// logs recorded in this session; writes are debounced and flushed when the
-    /// app backgrounds. Entries still in flight at exit aren't persisted, since a
-    /// restored pending entry could never complete.
+    /// logs recorded in this session.
+    ///
+    /// Each entry is appended to a write-ahead journal as it is captured, so it
+    /// is durable within milliseconds rather than waiting on the debounced
+    /// archive write — which is what lets a response outlive the crash it
+    /// caused. Entries still in flight are persisted too, and come back marked
+    /// *No response*. With `PersistenceOptions.captureCrashes` on (the default)
+    /// the crash itself is recorded and pinned to the exchange that was live at
+    /// the time; see `ApiLogger.lastCrashPublisher`.
     public func enablePersistence(_ isEnabled: Bool) {
         if isEnabled {
             LogPersistence.shared.enable()
@@ -259,7 +291,12 @@ public final class ApiLogger {
     /// in front — the list sorts by insertion order. They're flagged here rather
     /// than at the decoding layer, so every restore path is marked by
     /// construction.
-    func restore(api: [ApiLog], eventTracker: [ApiLog], thirdParty: [ApiLog]) {
+    func restore(
+        api: [ApiLog],
+        eventTracker: [ApiLog],
+        thirdParty: [ApiLog],
+        crash: CrashReport? = nil
+    ) {
         let marked: ([ApiLog]) -> [ApiLog] = { logs in
             logs.map { log in
                 var log = log
@@ -272,6 +309,7 @@ public final class ApiLogger {
             self.logsSubject.value = marked(api) + self.logsSubject.value
             self.eventTrackerSubject.value = marked(eventTracker) + self.eventTrackerSubject.value
             self.thirdPartySubject.value = marked(thirdParty) + self.thirdPartySubject.value
+            self.lastCrashSubject.value = crash
         }
     }
 

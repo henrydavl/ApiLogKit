@@ -9,9 +9,34 @@ import Foundation
 
 enum ApiLogExporter {
 
+    /// The crash block prepended to a crash-linked entry's raw log, and the
+    /// text the detail screen's **Crash** section copies.
+    ///
+    /// Front-loaded so the first lines answer "what died, where, when"; the
+    /// captured call stack follows.
+    static func crashReport(for crash: CrashReport) -> String {
+        var output = "---------- Crash\n"
+        output += "\(crash.headline)\n"
+        if let explanation = crash.explanation {
+            output += "\(explanation)\n"
+        }
+        output += "Time: \(crash.date.apiLogFormatted())\n\n"
+        output += crash.callStack.joined(separator: "\n")
+        output += "\n\n"
+        return output
+    }
+
     /// Human-readable dump of a single log entry.
+    ///
+    /// A crash-linked entry leads with its crash block, so one shared file
+    /// carries the payload and the stack trace together — which is what gets
+    /// pasted into the bug report. Entries without a crash are unchanged.
     static func rawLog(for log: ApiLog) -> String {
-        var output = "\(log.url)\n\n"
+        var output = ""
+        if let crash = log.crash {
+            output += crashReport(for: crash)
+        }
+        output += "\(log.url)\n\n"
         output += "---------- Request Header\n"
         for (key, value) in log.requestHeader {
             output += "\(key): \(String(describing: value).jsonize())\n\n"
