@@ -12,6 +12,9 @@ logs (plus analytics events such as AppsFlyer) and presents them in a debug UI w
   marked pending, then fills in when the response lands
 - 💾 Optional persistence — logs survive relaunch, so a crash doesn't take the
   evidence with it
+- 💥 **Crash capture** — the crash is recorded and pinned to the exchange that was
+  live when it happened, so the next launch opens with the response that caused it
+  and the stack side by side. Catches Swift traps, not just `NSException`
 - 🌳 Interactive JSON viewer — collapsible objects/arrays with child counts,
   type-colored values, expand/collapse all. JSON passed as a string value (e.g.
   `["payload": jsonString]`) unfolds into the tree too — display only, copy and
@@ -168,12 +171,60 @@ ApiLogger.shared.clearPersistedLogs()
 > excluded from backups and written with file protection, but treat persistence as a
 > dev-build feature and gate it exactly like `isEnabled`.
 
-Writes are debounced and flushed when the app backgrounds. Entries still in flight at
-exit aren't persisted, since a restored pending entry could never complete.
+Storage is in two parts. The **archive** holds the bulk and is rewritten whole, so
+saves are debounced and flushed on backgrounding. In front of it sits a **write-ahead
+journal**, appended per entry, so a log is on disk within a millisecond of being
+captured instead of waiting on the debounce. That split is what makes a crash
+survivable — a foreground crash arrives long before any debounce fires.
+
+In-flight entries are persisted too, and come back marked **No response**. (They used
+to be dropped, on the grounds that a restored pending entry can never complete. That
+was right about the spinner and wrong about the entry: a request that was in flight
+when the app died is precisely what you want to see afterwards.)
 
 Restored entries carry an 📦 marker beside their status badge, so a log from the
 previous session is distinguishable at a glance from one recorded just now. The flag
 is also readable in code via `ApiLog.isRestored`.
+
+#### Crash capture
+
+On by default once persistence is on:
+
+```swift
+ApiLogKitConfig.persistence.captureCrashes = false  // to opt out
+```
+
+An uncaught crash is recorded and pinned to the entries that were live at the time —
+everything still in flight, plus the newest finished API entry. On the next launch the
+inspector opens with:
+
+- a **Previous session crashed** banner naming the crash, with a **View** button that
+  jumps straight to the suspect;
+- a red **CRASH** badge on that row;
+- a **Crash** section at the top of its detail screen with the call stack, monospaced
+  and copyable, directly above the response body that caused it;
+- the crash block prepended to that entry's raw log export, so one shared file carries
+  the payload and the stack together.
+
+Entries from an earlier run are never blamed, so an app that launched, sat idle and
+crashed won't pin yesterday's response to today's crash.
+
+**Both kinds of crash are caught.** Most Swift crashes — a force unwrap of nil, an
+out-of-range index, `fatalError` — never raise an `NSException`; they trap, and arrive
+as a POSIX signal. Those are the ones a bad payload produces, so they are handled
+alongside `NSException`, and a signal report carries a plain-language note about what
+the trap usually means. Whatever handler was already installed is always called
+afterwards, so **your crash reporter is unaffected** — Crashlytics, Sentry and the
+system's own handling all behave exactly as before.
+
+> ℹ️ **On the limits of this.** Unlike the Android counterpart, the crash handler does
+> not flush anything: inside a signal handler only async-signal-safe functions may be
+> called, so encoding JSON or touching `FileManager` there would risk deadlocking
+> against the very write being saved. Durability comes from the journal instead, which
+> means a residual window — an entry reaches disk one queue hop after capture, and a
+> crash *synchronous* with the logging call can still outrun it. In practice the gap is
+> sub-millisecond and decoding crashes happen well after it. Closing it entirely would
+> mean an `fsync` on every log write, which is too high a price for a debug logger.
 
 ### 6. Optional configuration
 

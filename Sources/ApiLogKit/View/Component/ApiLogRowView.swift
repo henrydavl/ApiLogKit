@@ -24,6 +24,7 @@ struct ApiLogRowView: View {
     }
 
     private var isPending: Bool { log.state == .pending }
+    private var isCrashSuspect: Bool { log.crash != nil }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -33,7 +34,15 @@ struct ApiLogRowView: View {
                 HStack(spacing: 6) {
                     if logType.isHTTP {
                         if isPending {
-                            pendingBadge
+                            // A restored entry that never completed is no
+                            // longer in flight — its process is gone — so it
+                            // gets a settled badge rather than a spinner that
+                            // would never stop.
+                            if log.isRestored {
+                                unfinishedBadge
+                            } else {
+                                pendingBadge
+                            }
                         } else {
                             Text(log.responseCode)
                                 .font(.system(size: 13, weight: .bold))
@@ -43,6 +52,12 @@ struct ApiLogRowView: View {
                                 .background(statusColor)
                                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                         }
+                    }
+
+                    // The reason this row is worth opening first: the app died
+                    // right after this exchange.
+                    if isCrashSuspect {
+                        crashBadge
                     }
 
                     if log.isRestored {
@@ -81,12 +96,47 @@ struct ApiLogRowView: View {
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(isPending ? Color.accentColor.opacity(0.5) : Color(.systemGray4),
-                        lineWidth: 1)
+                .stroke(borderColor, lineWidth: isCrashSuspect ? 2 : 1)
         )
         // Dim the whole row while in flight, so completed entries are what the
-        // eye lands on when scanning.
-        .opacity(isPending ? 0.55 : 1)
+        // eye lands on when scanning. A crash suspect is never dimmed, in
+        // flight or not: it is the row you came here to find.
+        .opacity(isPending && !isCrashSuspect ? 0.55 : 1)
+    }
+
+    private var borderColor: Color {
+        if isCrashSuspect { return .red }
+        return isPending ? Color.accentColor.opacity(0.5) : Color(.systemGray4)
+    }
+
+    /// Marks the entry a recorded crash was pinned to — the response the app
+    /// was most likely chewing on when it died, or the request that never came
+    /// back.
+    private var crashBadge: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "ant.fill")
+                .font(.system(size: 10, weight: .bold))
+            Text("CRASH")
+                .font(.system(size: 11, weight: .bold))
+        }
+        .foregroundColor(.white)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(Color.red)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+
+    /// The settled form of `pendingBadge`, for a restored entry whose response
+    /// never arrived. Grey rather than red: no response is a fact about that
+    /// run, not an error the server returned.
+    private var unfinishedBadge: some View {
+        Text("No response")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundColor(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Color.gray)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 
     /// Marks an entry that came from disk rather than this session. Sized to sit

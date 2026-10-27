@@ -199,6 +199,66 @@ enum DemoTraffic {
         URLSession.shared.dataTask(with: url).resume()
     }
 
+    /// The scenario crash capture exists for: a response lands, the code that
+    /// maps it chokes on the payload, and the app dies before the log has
+    /// finished being written.
+    ///
+    /// Crashes with a **Swift trap** (an out-of-range index) rather than an
+    /// `NSException`, because that is what a real decoding bug produces — and
+    /// it is the harder of the two to capture, since it arrives as a signal.
+    ///
+    /// A second request is left in flight so the restored list shows both kinds
+    /// of suspect: the response that was being handled, and the call that never
+    /// came back.
+    static func crashOnResponse() {
+        _ = ApiLogger.shared.beginLog(
+            method: "POST",
+            url: "https://api.shop.example.com/v1/checkout",
+            requestHeader: headers,
+            requestBody: ["cart": "A1", "amount": 85000]
+        )
+
+        let scenario = Scenario(
+            label: "GET outlets · 200",
+            method: "GET",
+            url: "https://api.shop.example.com/v1/outlets",
+            status: "200",
+            delay: 0.3,
+            responseBody: #"{"data":{"outlet":[{"id":"not-a-number","name":"Warung Kopi"}]}}"#
+        )
+        let token = ApiLogger.shared.beginLog(
+            method: scenario.method,
+            url: scenario.url,
+            requestHeader: headers,
+            requestBody: scenario.requestBody
+        )
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + scenario.delay) {
+            ApiLogger.shared.completeLog(
+                token,
+                with: ApiLog(
+                    responseCode: scenario.status,
+                    method: scenario.method,
+                    url: scenario.url,
+                    responseTime: "0.30",
+                    size: "\(scenario.responseBody.utf8.count)",
+                    date: Date(),
+                    responseHeader: ["Content-Type": "application/json"],
+                    responseBody: scenario.responseBody,
+                    requestHeader: headers,
+                    requestBody: scenario.requestBody
+                )
+            )
+
+            // The very next turn of the main run loop — as close to the
+            // response as a real mapping failure gets.
+            DispatchQueue.main.async {
+                let outlets: [String] = []
+                _ = outlets[3]
+            }
+        }
+    }
+
     /// An analytics-style entry for the EventTracker tab.
     static func fireTrackerEvent() {
         ApiLogger.shared.addEventTrackerLog(

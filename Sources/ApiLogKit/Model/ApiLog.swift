@@ -6,7 +6,11 @@
 import Foundation
 
 /// Lifecycle of a logged exchange.
-public enum ApiLogState {
+///
+/// Raw-valued and `Codable` so an in-flight entry can be written to disk and
+/// read back still marked pending — a request that never came back is the
+/// strongest evidence there is about a crash.
+public enum ApiLogState: String, Codable {
     /// Request sent, no response yet. The response fields are placeholders.
     case pending
     /// The exchange finished — successfully or not. `responseCode` tells which.
@@ -57,6 +61,13 @@ public struct ApiLog: Identifiable {
     /// by definition.
     public private(set) var isRestored: Bool = false
 
+    /// The crash this entry is blamed for, when one was recorded immediately
+    /// after it — see `CrashReport` and `PersistenceOptions.captureCrashes`.
+    ///
+    /// Only ever set on a restored entry: the crash is recorded as the process
+    /// dies, so the pairing first becomes visible on the next launch.
+    public private(set) var crash: CrashReport?
+
     public init(
         responseCode: String,
         method: String,
@@ -94,6 +105,12 @@ public struct ApiLog: Identifiable {
     /// `ApiLogger.restore(api:eventTracker:thirdParty:)`.
     mutating func markRestored() {
         isRestored = true
+    }
+
+    /// Pins `report` to this entry. Applied during restore by `CrashSuspects`,
+    /// which decides which entries a crash is allowed to blame.
+    mutating func markCrashed(with report: CrashReport) {
+        crash = report
     }
 
     /// In-flight entry: the request side is known, the response side isn't yet.

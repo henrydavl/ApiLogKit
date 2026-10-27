@@ -110,7 +110,15 @@ final class PersistedApiLogTests: XCTestCase {
         XCTAssertEqual(restored.state, .finished)
     }
 
-    func testRestoredEntryGetsFreshIdentity() {
+    /// Identity is now carried across the round trip rather than regenerated.
+    ///
+    /// It used to be regenerated on the grounds that a restored entry is new to
+    /// this session, which was harmless while the archive was the only store.
+    /// The journal changed that: an in-flight entry is written when the request
+    /// leaves and again when it completes, and the two lines are collapsed by
+    /// id. A fresh id on read would turn every completed request into two
+    /// entries.
+    func testRestoredEntryKeepsItsIdentity() {
         let original = ApiLog(
             responseCode: "200", method: "GET", url: "https://example.com",
             responseTime: "0.1", size: "1", date: Date(),
@@ -119,7 +127,19 @@ final class PersistedApiLogTests: XCTestCase {
 
         let restored = PersistedApiLog(original, maxBodyBytes: 1_024).toApiLog()
 
-        XCTAssertNotEqual(restored.id, original.id, "a restored entry is new to this session")
+        XCTAssertEqual(restored.id, original.id, "the journal collapses an entry's lines by id")
+    }
+
+    /// In-flight entries used to be dropped at save time; they are now stored,
+    /// because a request that never came back is the strongest evidence there
+    /// is about a crash.
+    func testPendingEntrySurvivesTheRoundTripStillPending() {
+        let original = ApiLog(method: "POST", url: "https://example.com/checkout")
+
+        let restored = PersistedApiLog(original, maxBodyBytes: 1_024).toApiLog()
+
+        XCTAssertEqual(restored.state, .pending)
+        XCTAssertEqual(restored.id, original.id)
     }
 
     func testRawRequestBodyTextIsPreserved() {

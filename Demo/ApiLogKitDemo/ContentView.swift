@@ -20,7 +20,8 @@ struct ContentView: View {
                 inFlightSection
                 trafficSection
                 otherTabsSection
-                persistenceSection
+                crashSection
+            persistenceSection
             }
             .listStyle(.insetGrouped)
             .navigationTitle("ApiLogKit Demo")
@@ -120,6 +121,20 @@ struct ContentView: View {
             Text("Other tabs")
         } footer: {
             Text("The real request goes through URLSession, so the 3rd-party interceptor captures it into the 3rd Party tab — including its own pending row. It records a failure if the machine is offline, which is equally worth seeing.")
+        }
+    }
+
+    private var crashSection: some View {
+        Section {
+            Button(role: .destructive) {
+                DemoTraffic.crashOnResponse()
+            } label: {
+                Label("Crash on a response", systemImage: "ant.fill")
+            }
+        } header: {
+            Text("Crash")
+        } footer: {
+            Text("Fires two requests and then crashes while handling the response to one of them — a Swift trap, the same shape as a decoding bug. Relaunch and open the inspector: the previous session's crash is announced at the top, the response that caused it is badged CRASH, and the request that never came back is badged No response.")
         }
     }
 

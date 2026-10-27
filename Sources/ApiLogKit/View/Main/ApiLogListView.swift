@@ -115,6 +115,9 @@ public struct ApiLogListView: View {
                     if viewModel.isPaused {
                         pausedBanner
                     }
+                    if viewModel.showsCrashBanner, let crash = viewModel.lastCrash {
+                        crashBanner(crash)
+                    }
                     filterBar
                 }
             }
@@ -314,6 +317,45 @@ public struct ApiLogListView: View {
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity)
         .background(Color.orange.opacity(0.15))
+    }
+
+    /// Announces that the previous run ended in a crash and points at the
+    /// exchange blamed for it.
+    ///
+    /// Pinned above the list rather than shown as a row in it: the suspect sits
+    /// somewhere in the middle of the restored entries chronologically, and
+    /// after a crash the one thing you don't want to do is go looking for it.
+    private func crashBanner(_ crash: CrashReport) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "ant.fill")
+                .foregroundColor(.red)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Previous session crashed")
+                    .font(.caption.weight(.semibold))
+                Text(crash.headline)
+                    .font(.caption2)
+                    // Two lines: the reason is often the part that names the
+                    // offending field, and one line loses it.
+                    .lineLimit(2)
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+            if let log = viewModel.crashedLog {
+                Button("View") { selectedLog = log }
+                    .font(.caption.weight(.semibold))
+            }
+            Button {
+                viewModel.dismissCrashBanner()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.caption)
+            }
+            .accessibilityLabel("Dismiss crash notice")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
+        .background(Color.red.opacity(0.12))
     }
 
     // MARK: - Menu
